@@ -79,7 +79,6 @@ function lockBox(canvas: HTMLCanvasElement, cssW: number, cssH: number): { w: nu
   canvas.style.boxSizing = 'border-box';
   canvas.style.width = `min(${cssW}px, 100%)`;
   canvas.style.maxWidth = '100%';
-  canvas.style.maxHeight = '100%';
   canvas.style.height = 'auto';
   canvas.style.aspectRatio = `${cssW} / ${cssH}`;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -91,7 +90,6 @@ function lockBox(canvas: HTMLCanvasElement, cssW: number, cssH: number): { w: nu
     canvas.height = bitmap.h;
     canvas.style.width = `min(${cssW}px, 100%)`;
     canvas.style.maxWidth = '100%';
-    canvas.style.maxHeight = '100%';
     canvas.style.height = 'auto';
     canvas.style.aspectRatio = `${cssW} / ${cssH}`;
   }

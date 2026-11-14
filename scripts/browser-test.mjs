@@ -181,7 +181,7 @@ try {
   for (let i = 0; i < 8; i += 1) {
     const next = await page.$('[data-act="dialogue-next"]');
     if (!next) break;
-    await next.click();
+    await next.evaluate((el) => el.click());
     await sleep(30);
   }
   await page.waitForFunction(() => window.__xingya.mode === 'explore');
@@ -417,7 +417,7 @@ try {
   for (let i = 0; i < 8; i += 1) {
     const next = await page.$('[data-act="dialogue-next"]');
     if (!next) break;
-    await next.click();
+    await next.evaluate((el) => el.click());
     await sleep(40);
   }
   const afterCatch = await page.evaluate(() => ({
@@ -463,6 +463,31 @@ try {
     });
     if (!foeOnScreen) throw new Error(`敌方信息没有完整出现在画面里 ${width}x${height}`);
     await page.screenshot({ path: `${shotDir}/battle-${width}x${height}.png` });
+    const shell = await page.evaluate(() => {
+      const sheet = document.querySelector('.sheet').getBoundingClientRect();
+      const head = document.querySelector('.sheet-head')?.getBoundingClientRect();
+      const foot = document.querySelector('.sheet-foot').getBoundingClientRect();
+      return { w: Math.round(sheet.width), h: Math.round(sheet.height), foot: Math.round(foot.top), head: head ? Math.round(head.top) : 0 };
+    });
+    await page.evaluate(() => {
+      const log = document.querySelector('.log');
+      if (log) log.textContent = '这是一句很短的战报';
+    });
+    const shellAfter = await page.evaluate(() => {
+      const sheet = document.querySelector('.sheet').getBoundingClientRect();
+      const foot = document.querySelector('.sheet-foot').getBoundingClientRect();
+      const log = document.querySelector('.log');
+      log.textContent = '野生的露珠蛙甩出很长的水花，战报变长以后外框不能跟着变大，多出来的字在固定高度里滚动。';
+      return {
+        w: Math.round(sheet.width),
+        h: Math.round(sheet.height),
+        foot: Math.round(foot.top),
+        scroll: log.scrollHeight > log.clientHeight + 2,
+      };
+    });
+    if (shell.w !== shellAfter.w || shell.h !== shellAfter.h || shell.foot !== shellAfter.foot || !shellAfter.scroll) {
+      throw new Error(`弹框尺寸被内容撑动 ${width}x${height} ${JSON.stringify({ shell, shellAfter })}`);
+    }
   }
   await page.evaluate(() => {
     const log = document.querySelector('.log');
@@ -544,14 +569,14 @@ try {
     game.play.y = (16 + 0.5) * 48;
     game.play.team[0].hp = 1;
   });
-  await sleep(200);
-  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window.__xingya.nearbyLabel || '').includes('星芽驿'), { timeout: 3000 });
+  await page.evaluate(() => window.__xingya.handle('interact'));
   await page.waitForSelector('[data-act="heal-yes"]', { timeout: 3000 });
   await page.click('[data-act="heal-yes"]');
   for (let i = 0; i < 4; i += 1) {
     const next = await page.$('[data-act="dialogue-next"]');
     if (!next) break;
-    await next.click();
+    await next.evaluate((el) => el.click());
     await sleep(30);
   }
   const healed = await page.evaluate(() => window.__xingya.play.team[0].hp > 1);
@@ -713,6 +738,91 @@ try {
   if (stacked.contexts !== 1 || stacked.live > 48) {
     throw new Error(`反复切换堆叠了音频 ${JSON.stringify(stacked)}`);
   }
+  await page.click('[data-act="continue"]');
+  await page.waitForFunction(() => window.__xingya.mode === 'explore');
+  await page.click('[data-act="menu"]');
+  await page.click('[data-arg="elements"]');
+  const rules = await page.$eval('.sheet-body', (el) => el.textContent);
+  if (!rules.includes('金克木') || !rules.includes('纯阴')) throw new Error('五行说明不完整');
+  await page.click('[data-arg="menu"]');
+  await page.click('[data-arg="skilldex"]');
+  await page.type('#skill-q', '叶刃');
+  await sleep(80);
+  const found = await page.$eval('#skill-results', (el) => el.textContent);
+  if (!found.includes('叶刃') || !found.includes('480')) throw new Error(`技能检索不对 ${found.slice(0, 120)}`);
+  await page.evaluate(() => {
+    const mon = window.__xingya.play.team[0];
+    mon.level = 24;
+    mon.moves = [`${mon.aspect || 'yanghuo'}-basic-attack-0`];
+  });
+  await page.click('[data-arg="menu"]');
+  await page.click('[data-arg="team"]');
+  await page.click('[data-act="open-loadout"]');
+  const divine = await page.evaluate(() => {
+    const button = [...document.querySelectorAll('[data-act="equip-move"]')].find((el) => el.textContent.includes('神级'));
+    return button ? button.getAttribute('data-arg') : '';
+  });
+  if (!divine) throw new Error('24 级没有出现神级技能');
+  await page.click(`[data-act="equip-move"][data-arg="${divine}"]`);
+  const equipped = await page.evaluate((id) => window.__xingya.play.team[0].moves.includes(id), divine);
+  if (!equipped) throw new Error('神级技能没有装备上');
+  await page.evaluate(() => {
+    const mon = window.__xingya.play.team[0];
+    const picks = ['攻击', '防御', '治疗', '状态'].map((label) => {
+      const button = [...document.querySelectorAll('[data-act="equip-move"]')].find((el) => el.textContent.includes(`初级`) && el.textContent.includes(label));
+      return button?.getAttribute('data-arg');
+    }).filter(Boolean);
+    mon.moves = picks;
+    mon.hp = 999;
+  });
+  await page.click('[data-arg="team"]');
+  await page.keyboard.press('Escape');
+  await page.click('[data-act="close"]');
+  await page.evaluate(() => {
+    const game = window.__xingya;
+    const wild = game.wilds.find((item) => item.speciesId === 'yanke');
+    wild.mon.hp = 500;
+    game.play.x = wild.x;
+    game.play.y = wild.y;
+    game.play.team[0].hp = 200;
+  });
+  await page.waitForSelector('[data-act="encounter-fight"]', { timeout: 4000 });
+  await page.click('[data-act="encounter-fight"]');
+  await page.waitForSelector('[data-act="battle-move"]');
+  const effectLogs = [];
+  for (let i = 0; i < 4; i += 1) {
+    await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
+    const button = await page.$(`[data-act="battle-move"][data-arg="${i}"]`);
+    if (!button) break;
+    await button.click();
+    await sleep(60);
+    effectLogs.push(await page.$eval('.log', (el) => el.textContent));
+  }
+  const joined = effectLogs.join('\n');
+  if (!/伤害|护盾|恢复|持续|定住|上升/.test(joined)) throw new Error(`五类技能没有打出可见效果 ${joined}`);
+  const saveBeforePreview = await page.evaluate(() => localStorage.getItem('xingya-island-save-v1'));
+  for (const file of ['iso.html', 'view3d.html']) {
+    const previewPage = await browser.newPage();
+    const previewErrors = [];
+    previewPage.on('pageerror', (error) => previewErrors.push(String(error)));
+    await previewPage.setViewport({ width: 390, height: 844 });
+    await previewPage.goto(`http://127.0.0.1:${port}/starbud-island/${file}`, { waitUntil: 'networkidle0' });
+    await previewPage.waitForSelector('canvas', { timeout: 8000 });
+    await previewPage.keyboard.down('KeyD');
+    await sleep(250);
+    await previewPage.keyboard.up('KeyD');
+    await previewPage.screenshot({ path: `${shotDir}/${file.replace('.html', '')}-390x844.png` });
+    await previewPage.setViewport({ width: 844, height: 390 });
+    await sleep(200);
+    await previewPage.screenshot({ path: `${shotDir}/${file.replace('.html', '')}-844x390.png` });
+    await previewPage.setViewport({ width: 320, height: 568 });
+    await sleep(150);
+    await previewPage.screenshot({ path: `${shotDir}/${file.replace('.html', '')}-320x568.png` });
+    if (previewErrors.length) throw new Error(`${file} 报错 ${previewErrors.join('\n')}`);
+    await previewPage.close();
+  }
+  const saveAfterPreview = await page.evaluate(() => localStorage.getItem('xingya-island-save-v1'));
+  if (saveBeforePreview !== saveAfterPreview) throw new Error('预览页改动了原版存档');
   if (errors.length) throw new Error(`页面报错：${errors.join('\n')}`);
   await writeFile(`${shotDir}/result.json`, JSON.stringify({ ok: true, afterCatch, afterBattle }, null, 2));
   console.log('浏览器流程通过');

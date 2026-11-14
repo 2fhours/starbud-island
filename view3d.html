@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#7ec8b8" />
+    <title>星芽岛 · 3D 预览</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/preview.css" />
+  </head>
+  <body>
+    <nav class="preview-nav">
+      <a href="./">2D 游戏</a>
+      <a href="./iso.html">2.5D</a>
+      <a href="./view3d.html" aria-current="page">3D</a>
+    </nav>
+    <div id="view3d-root"></div>
+    <p id="view3d-note" class="preview-note">3D 预览使用 WebGL。默认斜俯相机，左右看只转一点。这不是完整游戏。</p>
+    <div class="preview-actions">
+      <button type="button" id="orbit-left">左看</button>
+      <button type="button" id="orbit-right">右看</button>
+    </div>
+    <p id="view3d-version" class="preview-version"></p>
+    <script type="module" src="./src/view3d.ts"></script>
+  </body>
+</html>

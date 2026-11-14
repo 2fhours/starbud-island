@@ -10,6 +10,14 @@ if (!(canvas instanceof HTMLCanvasElement) || !(hud instanceof HTMLElement) || !
   throw new Error('页面结构不完整');
 }
 
+const syncViewport = () => {
+  const height = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.style.setProperty('--vvh', `${height}px`);
+};
+syncViewport();
+window.visualViewport?.addEventListener('resize', syncViewport);
+window.addEventListener('resize', syncViewport);
+
 const version = document.querySelector('#build-tag');
 if (version) version.textContent = `v${APP_VERSION}`;
 

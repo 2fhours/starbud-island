@@ -1,8 +1,11 @@
 import type { Battle } from './battle';
-import { NAME_PRESETS, bossScript, getMove, getSpecies, practiceScript, SPECIES_LIST, STARTERS, TYPE_META } from './data';
-import { formatPlay, grandmaFollowup, maxHp, questObjectives } from './logic';
+import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
+import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
+import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, questObjectives } from './logic';
+import { SKILL_LIST, getMove, skillStats } from './skills';
 import type { Input } from './input';
-import type { PlayState, SpeciesId } from './types';
+import type { MoveCat, PlayState, SpeciesId, TypeId } from './types';
+import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
 export interface EncounterView {
   speciesId: SpeciesId;
@@ -38,7 +41,16 @@ export interface GameHost {
   signView: { title: string; text: string } | null;
   npcId: string | null;
   dialogue: { speaker: string; text: string } | null;
+  skillQuery: string;
+  skillType: string;
+  skillTier: string;
+  skillCat: string;
+  loadoutIndex: number;
   handle(act: string, arg?: string | null): void;
+}
+
+function shell(title: string, body: string, foot: string, extra = ''): string {
+  return `<section class="sheet ${extra}"><header class="sheet-head">${title}</header><div class="sheet-body">${body}</div><footer class="sheet-foot">${foot}</footer></section>`;
 }
 
 function esc(value: string): string {
@@ -52,7 +64,7 @@ function hpMarkup(hp: number, max: number): string {
 }
 
 function typePill(type: string): string {
-  const meta = TYPE_META[type as keyof typeof TYPE_META];
+  const meta = TYPE_META[type as TypeId];
   if (!meta) return '';
   return `<span class="type" style="background:${meta.color}">${meta.label}</span>`;
 }
@@ -72,45 +84,51 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   if (mode === 'title' || mode === 'confirm-new') {
     inner = titleSheet(host, mode === 'confirm-new');
   } else if (mode === 'create-name') {
-    inner = `<section class="sheet"><p class="eyebrow">出发之前</p><h2>怎么称呼你？</h2><p>选一个旅伴称呼就好，不会上传，也不会当成真实姓名。</p><div class="stack">${NAME_PRESETS.map((name) => `<button class="btn ${host.createName === name ? 'leaf' : 'secondary'}" data-act="pick-name" data-arg="${esc(name)}">${esc(name)}</button>`).join('')}<button class="btn" data-act="to-starter">选好了</button><button class="texty" data-act="title">返回</button></div></section>`;
+    inner = shell('<p class="eyebrow">出发之前</p><h2>怎么称呼你？</h2>', `<p>选一个旅伴称呼就好，不会上传，也不会当成真实姓名。</p><div class="stack">${NAME_PRESETS.map((name) => `<button class="btn ${host.createName === name ? 'leaf' : 'secondary'}" data-act="pick-name" data-arg="${esc(name)}">${esc(name)}</button>`).join('')}</div>`, `<div class="stack"><button class="btn" data-act="to-starter">选好了</button><button class="texty" data-act="title">返回</button></div>`);
   } else if (mode === 'create-starter') {
-    inner = `<section class="sheet"><p class="eyebrow">${esc(host.createName)} 的第一位伙伴</p><h2>选一只芽灵</h2><div class="choice-grid">${STARTERS.map((id) => {
+    inner = shell(`<p class="eyebrow">${esc(host.createName)} 的第一位伙伴</p><h2>选一只芽灵</h2>`, `<div class="choice-grid">${STARTERS.map((id) => {
       const species = getSpecies(id);
       return `<button class="choice ${host.selectedStarter === id ? 'selected' : ''}" data-act="pick-starter" data-arg="${id}">${portrait(id)}<strong>${species.name}</strong><div>${typePill(species.type)}</div><small>${esc(species.blurb)}</small></button>`;
-    }).join('')}</div><div class="stack" style="margin-top:12px"><button class="btn leaf" data-act="confirm-starter" ${host.selectedStarter ? '' : 'disabled'}>和它一起出发</button><button class="texty" data-act="to-name">返回</button></div></section>`;
+    }).join('')}</div>`, `<div class="stack"><button class="btn leaf" data-act="confirm-starter" ${host.selectedStarter ? '' : 'disabled'}>和它一起出发</button><button class="texty" data-act="to-name">返回</button></div>`);
   } else if (mode === 'dialogue' && host.dialogue) {
-    inner = `<section class="sheet"><p class="eyebrow">${esc(host.dialogue.speaker)}</p><p>${esc(host.dialogue.text)}</p><button class="btn" data-act="dialogue-next">继续</button></section>`;
+    inner = shell(`<p class="eyebrow">${esc(host.dialogue.speaker)}</p>`, `<p class="dialogue-copy" data-act="dialogue-next">${esc(host.dialogue.text)}</p>`, `<p class="fine">点文字可跳过，也会自动继续</p>`);
   } else if (mode === 'encounter' && host.encounterView) {
     const view = host.encounterView;
-    inner = `<section class="sheet encounter-sheet"><p class="eyebrow">野生芽灵</p><h2>${esc(view.name)}</h2><div class="stage" data-type="${esc(view.type)}">${portrait(view.speciesId, false, 'stage')}</div><p>${typePill(view.type)} ${view.level} 级</p>${hpMarkup(view.hp, view.max)}<p>可以邀请它同行，也可以先比试。体力越低，星芽球越容易成功。</p><div class="stack actions"><button class="btn leaf" data-act="encounter-catch">捕捉</button><button class="btn" data-act="encounter-fight">对战</button><button class="btn secondary" data-act="encounter-leave">先离开</button></div></section>`;
+    inner = shell(`<p class="eyebrow">野生芽灵</p><h2>${esc(view.name)}</h2>`, `<div class="stage" data-type="${esc(stageElement(view.type as TypeId))}">${portrait(view.speciesId, false, 'stage')}</div><p>${typePill(view.type)} ${view.level} 级</p>${hpMarkup(view.hp, view.max)}<p>可以邀请它同行，也可以先比试。体力越低，星芽球越容易成功。</p>`, `<div class="stack actions"><button class="btn leaf" data-act="encounter-catch">捕捉</button><button class="btn" data-act="encounter-fight">对战</button><button class="btn secondary" data-act="encounter-leave">先离开</button></div>`, 'encounter-sheet');
   } else if (mode === 'capture' && host.captureView) {
     const view = host.captureView;
-    inner = `<section class="sheet"><p class="eyebrow">星芽球 × ${view.balls}</p><h2>捕捉 ${esc(view.name)}</h2><div class="ring-wrap"><canvas id="catch-ring" width="240" height="240"></canvas></div><p id="catch-odds">等光环缩到绿圈上再投掷。</p>${hpMarkup(view.hp, view.max)}<div class="row"><button class="btn leaf" data-act="throw">投掷</button><button class="btn secondary" data-act="capture-back">先不扔</button></div><p class="fine">空格或交谈键也可以投掷。完美时机会明显提高成功率。</p></section>`;
+    inner = shell(`<p class="eyebrow">星芽球 × ${view.balls}</p><h2>捕捉 ${esc(view.name)}</h2>`, `<div class="ring-wrap"><canvas id="catch-ring" width="240" height="240"></canvas></div><p id="catch-odds">等光环缩到绿圈上再投掷。</p>${hpMarkup(view.hp, view.max)}<p class="fine">空格或交谈键也可以投掷。完美时机会明显提高成功率。</p>`, `<div class="row"><button class="btn leaf" data-act="throw">投掷</button><button class="btn secondary" data-act="capture-back">先不扔</button></div>`);
   } else if (mode === 'shake' && host.captureView) {
-    inner = `<section class="sheet"><h2>${host.shakeSuccess ? '星芽球晃了三下' : '星芽球停住了'}</h2><p>${host.shakeSuccess ? '它好像安稳下来了。' : '里面还在挣扎。'}</p><button class="btn" data-act="shake-skip">继续</button></section>`;
+    inner = shell(`<h2>${host.shakeSuccess ? '星芽球晃了三下' : '星芽球停住了'}</h2>`, `<p data-act="shake-skip">${host.shakeSuccess ? '它好像安稳下来了。' : '里面还在挣扎。'}</p>`, `<p class="fine">结果会自动继续</p>`);
   } else if (mode === 'battle' && host.battle && host.play) {
     inner = battleSheet(host);
   } else if (mode === 'menu') {
-    inner = `<section class="sheet"><h2>菜单</h2><div class="stack"><button class="btn secondary" data-act="panel" data-arg="team">队伍</button><button class="btn secondary" data-act="panel" data-arg="dex">图鉴</button><button class="btn secondary" data-act="panel" data-arg="bag">背包</button><button class="btn secondary" data-act="panel" data-arg="quest">委托</button><button class="btn secondary" data-act="panel" data-arg="help">操作说明</button><button class="btn" data-act="save">手动保存</button><button class="btn secondary" data-act="mute">${host.muted ? '打开音效' : '关闭音效'}</button><button class="btn secondary" data-act="title">回到标题</button><button class="texty" data-act="ask-reset">清除存档</button><button class="texty" data-act="close">关闭</button></div></section>`;
+    inner = shell('<h2>菜单</h2>', `<div class="stack"><button class="btn secondary" data-act="panel" data-arg="team">队伍</button><button class="btn secondary" data-act="panel" data-arg="dex">图鉴</button><button class="btn secondary" data-act="panel" data-arg="elements">五行阴阳</button><button class="btn secondary" data-act="panel" data-arg="skilldex">技能图鉴</button><button class="btn secondary" data-act="panel" data-arg="bag">背包</button><button class="btn secondary" data-act="panel" data-arg="quest">委托</button><button class="btn secondary" data-act="panel" data-arg="help">操作说明</button><a class="btn secondary" href="./iso.html">2.5D 预览</a><a class="btn secondary" href="./view3d.html">3D 预览</a></div>`, `<div class="stack"><button class="btn" data-act="save">手动保存</button><button class="btn secondary" data-act="mute">${host.muted ? '打开音效' : '关闭音效'}</button><button class="btn secondary" data-act="title">回到标题</button><button class="texty" data-act="ask-reset">清除存档</button><button class="texty" data-act="close">关闭</button></div>`);
   } else if (mode === 'team' && host.play) {
     inner = teamSheet(host.play);
   } else if (mode === 'dex' && host.play) {
     inner = dexSheet(host.play);
   } else if (mode === 'bag' && host.play) {
-    inner = `<section class="sheet"><h2>背包</h2><p><strong>星芽球 × ${host.play.balls}</strong></p><p>邀请芽灵同行时消耗。光环越接近绿色目标圈，成功率越高。少于 8 个时，在星芽驿休息会补到 8 个。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+    inner = shell('<h2>背包</h2>', `<p><strong>星芽球 × ${host.play.balls}</strong></p><p>邀请芽灵同行时消耗。光环越接近绿色目标圈，成功率越高。少于 8 个时，在星芽驿休息会补到 8 个。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
   } else if (mode === 'quest' && host.play) {
     const items = questObjectives(host.play.quest);
-    inner = `<section class="sheet"><h2>芽婆婆的委托</h2>${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+    inner = shell('<h2>芽婆婆的委托</h2>', `${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+  } else if (mode === 'elements') {
+    inner = elementsSheet();
+  } else if (mode === 'skilldex') {
+    inner = skilldexSheet(host);
+  } else if (mode === 'loadout' && host.play) {
+    inner = loadoutSheet(host);
   } else if (mode === 'help') {
-    inner = `<section class="sheet"><h2>操作说明</h2><p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 和 2 使用技能。</p><p>手机：左下角摇杆或方向按钮移动，也可以在地图上按住拖动，朝拖动方向走路，松开即停。右下角是交谈和菜单。</p><p>背景音乐可以在画面上的音乐开关和音量条里调整。关闭后会记住，刷新也不会自己打开。</p><p>草克水，水克火，火克草。电擅长对付水和风，岩又硬又慢。靠近会走路的芽灵就会遇见它们。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+    inner = shell('<h2>操作说明</h2>', `<p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 到 4 使用已装备的技能。</p><p>手机：左下角摇杆移动，也可以在地图上按住拖动。右下角是交谈。菜单在右上角。</p><p>对话和战报会自动继续，点文字可以提前跳过。技能、捕捉、逃跑、休息和清除存档仍要自己点。</p><p>五行相克和技能图鉴都在菜单里。每只芽灵最多装备 4 个技能。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
   } else if (mode === 'confirm-reset') {
-    inner = `<section class="sheet"><h2>清除这台设备上的存档？</h2><p>伙伴、图鉴、星芽球和委托进度都会消失。此操作不能撤销。</p><div class="row"><button class="btn" data-act="confirm-reset">确认清除</button><button class="btn secondary" data-act="cancel-reset">再想想</button></div></section>`;
+    inner = shell('<h2>清除这台设备上的存档？</h2>', '<p>伙伴、图鉴、星芽球和委托进度都会消失。此操作不能撤销，也不会自动执行。</p>', `<div class="row"><button class="btn" data-act="confirm-reset">确认清除</button><button class="btn secondary" data-act="cancel-reset">再想想</button></div>`);
   } else if (mode === 'npc' && host.npcId && host.play) {
     inner = npcSheet(host);
   } else if (mode === 'heal') {
-    inner = `<section class="sheet"><p class="eyebrow">星芽驿</p><h2>要在这里休息吗？</h2><p>队伍里的伙伴会恢复全部体力。星芽球如果少于 8 个，会补到 8 个，避免你在岛上没法继续。</p><div class="row"><button class="btn leaf" data-act="heal-yes">休息</button><button class="btn secondary" data-act="close">离开</button></div></section>`;
+    inner = shell('<p class="eyebrow">星芽驿</p><h2>要在这里休息吗？</h2>', '<p>队伍里的伙伴会恢复全部体力。星芽球如果少于 8 个，会补到 8 个。休息需要你自己确认。</p>', `<div class="row"><button class="btn leaf" data-act="heal-yes">休息</button><button class="btn secondary" data-act="close">离开</button></div>`);
   } else if (mode === 'sign' && host.signView) {
-    inner = `<section class="sheet"><p class="eyebrow">告示</p><h2>${esc(host.signView.title)}</h2><p>${esc(host.signView.text)}</p><button class="btn" data-act="close">好</button></section>`;
+    inner = shell(`<p class="eyebrow">告示</p><h2>${esc(host.signView.title)}</h2>`, `<p data-act="close">${esc(host.signView.text)}</p>`, `<p class="fine">读完会自动返回</p>`);
   }
   const align = mode === 'title' || mode === 'confirm-new' ? 'title-dim' : '';
   root.innerHTML = `<div class="dim ${align}">${inner}</div>`;
@@ -118,25 +136,22 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
 
 function titleSheet(host: GameHost, confirm: boolean): string {
   if (confirm) {
-    return `<section class="sheet title-sheet"><h2>开始新旅程会覆盖存档</h2><p>这台设备上的 ${esc(host.saveSummaryText)} 会被新的进度替换。</p><div class="row"><button class="btn" data-act="confirm-new">仍然开始</button><button class="btn secondary" data-act="title">返回</button></div></section>`;
+    return shell('<h2>开始新旅程会覆盖存档</h2>', `<p>这台设备上的 ${esc(host.saveSummaryText)} 会被新的进度替换。这需要你确认，不会自动开始。</p>`, `<div class="row"><button class="btn" data-act="confirm-new">仍然开始</button><button class="btn secondary" data-act="title">返回</button></div>`, 'title-sheet');
   }
-  return `<section class="sheet title-sheet"><p class="eyebrow">原创芽灵小岛</p><h1>星芽岛</h1><p class="lead">在明亮的岛上散步，认识会自己走动的芽灵。邀请它们同行，或友好地比试一场。</p><div class="stack"><button class="btn leaf" data-act="new-game">开始新旅程</button><button class="btn" data-act="continue" ${host.saveExists ? '' : 'disabled'}>继续旅程</button><p class="fine">${host.saveExists ? esc(host.saveSummaryText) : '还没有旅程记录'}</p><button class="texty" data-act="ask-reset">清除存档</button><p class="fine">进度只写在这台设备里，不登录，也不收集个人资料。</p></div></section>`;
+  return shell('<p class="eyebrow">原创芽灵小岛</p><h1>星芽岛</h1>', `<p class="lead">在明亮的岛上散步，认识会自己走动的芽灵。邀请它们同行，或友好地比试一场。</p><p class="fine">${host.saveExists ? esc(host.saveSummaryText) : '还没有旅程记录'}</p><p class="fine">进度只写在这台设备里。2.5D 和 3D 只是预览，不改这趟旅程的存档。</p>`, `<div class="stack"><button class="btn leaf" data-act="new-game">开始新旅程</button><button class="btn" data-act="continue" ${host.saveExists ? '' : 'disabled'}>继续旅程</button><a class="btn secondary" href="./iso.html">2.5D 预览</a><a class="btn secondary" href="./view3d.html">3D 预览</a><button class="texty" data-act="ask-reset">清除存档</button></div>`, 'title-sheet');
 }
 
 function teamSheet(play: PlayState): string {
   const cards = play.team.map((mon, index) => {
     const species = getSpecies(mon.speciesId);
     const max = maxHp(mon);
-    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0)}<div><strong>${esc(species.name)}</strong> ${typePill(species.type)} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<p>${species.moves.map((id) => esc(getMove(id).name)).join(' · ')}</p>${index === 0 ? '<small>当前领队，会跟在身后</small>' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">设为领队</button>`}</div></article>`;
+    const names = (mon.moves ?? []).map((id) => esc(getMove(id).name)).join(' · ');
+    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0)}<div><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
     ? play.box.map((mon) => `<span>${esc(getSpecies(mon.speciesId).name)} ${mon.level}级</span>`).join('、')
     : '寄存处还空着。队伍满六只后再捕捉，就会寄存在这里。';
-  return `<section class="sheet"><h2>队伍</h2><div class="mon-list">${cards}</div><h3>驿站寄存</h3><p>${box}</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
-}
-
-function moveName(id: Parameters<typeof getMove>[0]): string {
-  return getMove(id).name;
+  return shell('<h2>队伍</h2>', `<div class="mon-list">${cards}</div><h3>驿站寄存</h3><p>${box}</p><p class="fine">试炼可在阴阳之间切换。16 级后可以暂时进入纯阴或纯阳，神级技能 24 级学会。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
 }
 
 function dexSheet(play: PlayState): string {
@@ -146,7 +161,7 @@ function dexSheet(play: PlayState): string {
     if (!entry?.seen) return `<article class="dex-card unknown"><div class="portrait"></div><strong>？？？</strong><p>还没见过</p></article>`;
     return `<article class="dex-card">${portrait(species.id)}<strong>${esc(species.name)}</strong><div>${typePill(species.type)}</div><p>${entry.caught ? esc(species.dex) : '见过了，还没同行。'}</p></article>`;
   }).join('');
-  return `<section class="sheet"><h2>芽灵图鉴 ${caught}/8</h2><div class="dex-grid">${cards}</div><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+  return shell(`<h2>芽灵图鉴 ${caught}/8</h2>`, `<div class="dex-grid">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
 }
 
 function battleSheet(host: GameHost): string {
@@ -157,7 +172,12 @@ function battleSheet(host: GameHost): string {
   const mine = battle.player[battle.pIndex];
   const foeSpecies = getSpecies(foe.speciesId);
   const mySpecies = getSpecies(mine.speciesId);
-  const moves = mySpecies.moves.map((id, index) => `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct ? '' : 'disabled'}>${index + 1}. ${esc(moveName(id))}</button>`).join('');
+  const mineState = battle.runtime[mine.uid];
+  const moves = (mine.moves ?? []).map((id, index) => {
+    const move = getMove(id);
+    const cooling = (mineState?.cd[id] ?? 0) > 0;
+    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
+  }).join('');
   const switches = battle.player.map((mon, index) => {
     const name = getSpecies(mon.speciesId).name;
     const disabled = mon.hp <= 0 || index === battle.pIndex;
@@ -168,7 +188,16 @@ function battleSheet(host: GameHost): string {
     : host.canAct
       ? `<div class="moves">${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<p class="auto-note">回合自动继续</p>`;
-  return `<section class="sheet battle-sheet"><div class="stage battle-stage" data-type="${esc(foeSpecies.type)}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeSpecies.type)}${hpMarkup(foe.hp, maxHp(foe))}</div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(mySpecies.type)}${hpMarkup(mine.hp, maxHp(mine))}</div></div><div class="actions">${actions}</div></section>`;
+  const foeAspect = aspectOf(foe);
+  const myAspect = aspectOf(mine);
+  const foeState = battle.runtime[foe.uid];
+  const tags = [
+    foeState?.shield ? `护盾${foeState.shield}` : '',
+    foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
+    foeState?.rootTurns ? '定身' : '',
+  ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}</div></div>`;
+  return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 
 function npcSheet(host: GameHost): string {
@@ -177,14 +206,52 @@ function npcSheet(host: GameHost): string {
   if (host.npcId === 'grandma') {
     const lines = grandmaFollowup(play.quest);
     const ready = play.quest.caughtWild && play.quest.bossDefeated && !play.quest.completed;
-    return `<section class="sheet"><p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>${lines.map((line) => `<p>${esc(line)}</p>`).join('')}<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div></section>`;
+    return shell('<p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>', lines.map((line) => `<p>${esc(line)}</p>`).join(''), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }
   if (host.npcId === 'qinghe') {
     const done = play.trainers.qinghe;
-    return `<section class="sheet"><h2>青禾</h2>${practiceScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')}<div class="row"><button class="btn" data-act="npc-fight">${done ? '再练一次' : '请多指教'}</button><button class="btn secondary" data-act="close">下次再说</button></div></section>`;
+    return shell('<h2>青禾</h2>', practiceScript(done).map((line) => `<p>${esc(line.text)}</p>`).join(''), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再练一次' : '请多指教'}</button><button class="btn secondary" data-act="close">下次再说</button></div>`);
   }
   const done = play.trainers.lanchuan;
-  return `<section class="sheet"><h2>岚川</h2>${bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')}<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div></section>`;
+  return shell('<h2>岚川</h2>', bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join(''), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
+}
+
+function elementsSheet(): string {
+  const pills = TYPE_ORDER.map((id) => typePill(id)).join('');
+  return shell('<h2>五行阴阳</h2>', `<div class="type-row">${pills}</div><p>${esc(ELEMENT_RULE_TEXT)}</p><p class="fine">十二种属性都能在技能图鉴里检索。野生芽灵带着各自五行的阴阳，16 级后可在队伍里把伙伴试炼成纯阴或纯阳。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+}
+
+export function skillResultsHtml(host: GameHost): string {
+  const stats = skillStats();
+  const query = host.skillQuery.trim();
+  const list = SKILL_LIST.filter((move) => {
+    if (host.skillType !== 'all' && move.type !== host.skillType) return false;
+    if (host.skillTier !== 'all' && move.tier !== host.skillTier) return false;
+    if (host.skillCat !== 'all' && move.cat !== host.skillCat) return false;
+    if (query && !move.name.includes(query) && !move.desc.includes(query)) return false;
+    return true;
+  });
+  const cards = list.slice(0, 80).map((move) => `<article class="skill-card"><strong>${esc(move.name)}</strong><div>${typePill(move.type)} <span>${TIER_LABEL[move.tier]} · ${CAT_LABEL[move.cat]}</span></div><p>${esc(move.desc)}</p></article>`).join('');
+  return `<p class="fine">共 ${stats.total} 个技能，当前显示 ${list.length} 个。每属性 ${stats.perType.yangmu ?? 0} 个。</p>${cards || '<p>没有符合的技能。</p>'}`;
+}
+
+function skilldexSheet(host: GameHost): string {
+  const typeButtons = [`<button class="btn tiny ${host.skillType === 'all' ? '' : 'secondary'}" data-act="skill-type" data-arg="all">全部</button>`, ...TYPE_ORDER.map((id) => `<button class="btn tiny ${host.skillType === id ? '' : 'secondary'}" data-act="skill-type" data-arg="${id}">${TYPE_META[id].label}</button>`)].join('');
+  const tiers = (['all', 'basic', 'mid', 'high', 'divine'] as const).map((id) => `<button class="btn tiny ${host.skillTier === id ? '' : 'secondary'}" data-act="skill-tier" data-arg="${id}">${id === 'all' ? '全阶' : TIER_LABEL[id]}</button>`).join('');
+  const cats = (['all', 'attack', 'guard', 'heal', 'aid', 'status'] as const).map((id) => `<button class="btn tiny ${host.skillCat === id ? '' : 'secondary'}" data-act="skill-cat" data-arg="${id}">${id === 'all' ? '全类' : CAT_LABEL[id as MoveCat]}</button>`).join('');
+  const body = `<div class="filter-row">${typeButtons}</div><div class="filter-row">${tiers}</div><div class="filter-row">${cats}</div><label class="skill-search">搜索<input id="skill-q" value="${esc(host.skillQuery)}" placeholder="技能名" autocomplete="off"></label><div id="skill-results">${skillResultsHtml(host)}</div>`;
+  return shell('<h2>技能图鉴</h2>', body, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+}
+
+function loadoutSheet(host: GameHost): string {
+  const play = host.play;
+  if (!play) return '';
+  const mon = play.team[host.loadoutIndex] ?? play.team[0];
+  if (!mon) return shell('<h2>技能</h2>', '<p>队伍是空的。</p>', `<button class="btn secondary" data-act="panel" data-arg="team">返回</button>`);
+  const equipped = new Set(mon.moves ?? []);
+  const known = learnableMoves(mon);
+  const cards = known.map((move) => `<button class="skill-card ${equipped.has(move.id) ? 'on' : ''}" data-act="equip-move" data-arg="${move.id}"><strong>${esc(move.name)}</strong><span>${TIER_LABEL[move.tier]} · ${CAT_LABEL[move.cat]} · ${TIER_LEVEL[move.tier]}级</span><small>${esc(move.desc)}</small></button>`).join('');
+  return shell(`<h2>${esc(getSpecies(mon.speciesId).name)}的技能</h2>`, `<p>${typePill(aspectOf(mon))} 已装备 ${equipped.size}/${LOADOUT_LIMIT}。点一下装备或卸下。神级要 24 级。</p><div class="skill-list">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="team">返回队伍</button>`);
 }
 
 export function mountTouch(el: HTMLElement, input: Input, onAct: (act: string) => void): void {
@@ -231,5 +298,5 @@ export function hudHtml(host: GameHost): string {
   const species = getSpecies(lead.speciesId);
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
   const quest = host.play.quest.completed ? '<small class="quest-chip">委托完成</small>' : '<small class="quest-chip">委托进行中</small>';
-  return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(species.type)}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
+  return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(aspectOf(lead))}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }

@@ -1,6 +1,8 @@
-import { getMove, getSpecies, effectiveness } from './data';
-import type { Mon, MoveDef, QuestFlags, SpeciesId, Timing } from './types';
-import { BALL_TOP_UP, MAX_LEVEL, TEAM_LIMIT } from './types';
+import { TYPE_META, relate } from './elements';
+import { getMove, skillsOf } from './skills';
+import { getSpecies } from './data';
+import type { Fighter, Mon, MoveCat, MoveDef, QuestFlags, SpeciesId, Timing, TypeId } from './types';
+import { BALL_TOP_UP, LOADOUT_LIMIT, MAX_LEVEL, TEAM_LIMIT, TIER_LEVEL } from './types';
 
 let uidSeq = 1;
 
@@ -36,32 +38,38 @@ export function expGain(foeLevel: number, baseExp: number, trainer: boolean): nu
   return Math.max(8, Math.floor((foeLevel * baseExp * (trainer ? 1.45 : 1)) / 7));
 }
 
-export function makeMon(speciesId: SpeciesId, level: number, hpRatio = 1): Mon {
+export function makeMon(speciesId: SpeciesId, level: number, hpRatio = 1, lockAspect = false): Mon {
   const mon: Mon = {
     uid: newUid(),
     speciesId,
     level,
     exp: 0,
     hp: 1,
-    stages: { atk: 0, def: 0 },
+    stages: { atk: 0, def: 0, spd: 0 },
+    aspect: getSpecies(speciesId).type,
   };
+  if (!lockAspect) mon.aspect = flipAspect(getSpecies(speciesId).type, mon.uid);
   mon.hp = clamp(Math.round(maxHp(mon) * hpRatio), 1, maxHp(mon));
+  ensureLoadout(mon);
   return mon;
 }
 
 export function cloneMon(mon: Mon): Mon {
-  return {
+  const copy: Mon = {
     ...mon,
     uid: newUid(),
-    stages: { atk: 0, def: 0 },
+    stages: { atk: 0, def: 0, spd: 0 },
     hp: clamp(mon.hp, 0, maxHp(mon)),
+    moves: [...(mon.moves ?? [])],
   };
+  ensureLoadout(copy);
+  return copy;
 }
 
 export function healTeam(team: Mon[]): void {
   for (const mon of team) {
     mon.hp = maxHp(mon);
-    mon.stages = { atk: 0, def: 0 };
+    mon.stages = { atk: 0, def: 0, spd: 0 };
   }
 }
 
@@ -95,42 +103,224 @@ export interface DamageResult {
   stab: boolean;
 }
 
+export function blankFighter(mon: Mon): Fighter {
+  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, cd: {} };
+}
+
+export function aspectOf(mon: Mon): TypeId {
+  const aspect = mon.aspect;
+  if (aspect && aspect in TYPE_META) return aspect;
+  return getSpecies(mon.speciesId).type;
+}
+
+function flipAspect(type: TypeId, uid: string): TypeId {
+  const meta = TYPE_META[type];
+  if (meta.element === 'pure') return type;
+  const yin = `yin${meta.element}` as TypeId;
+  const yang = `yang${meta.element}` as TypeId;
+  const hash = [...uid].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return hash % 2 === 0 ? yang : yin;
+}
+
+export function learnableMoves(mon: Mon): MoveDef[] {
+  return skillsOf(aspectOf(mon)).filter((move) => mon.level >= TIER_LEVEL[move.tier]);
+}
+
+export function defaultLoadout(mon: Mon): string[] {
+  const known = learnableMoves(mon);
+  const pick = (cat: MoveCat) => known.find((move) => move.cat === cat)?.id;
+  return [pick('attack'), pick('guard'), pick('heal'), pick('aid')].filter((id): id is string => !!id).slice(0, LOADOUT_LIMIT);
+}
+
+export function ensureLoadout(mon: Mon): void {
+  mon.aspect = aspectOf(mon);
+  const known = new Set(learnableMoves(mon).map((move) => move.id));
+  const kept = (mon.moves ?? []).filter((id) => known.has(id)).slice(0, LOADOUT_LIMIT);
+  mon.moves = kept.length ? kept : defaultLoadout(mon);
+}
+
+export function toggleEquip(mon: Mon, id: string): string {
+  ensureLoadout(mon);
+  const known = new Set(learnableMoves(mon).map((move) => move.id));
+  if (!known.has(id)) return '还没学会这一招';
+  const moves = mon.moves ?? [];
+  if (moves.includes(id)) {
+    if (moves.length <= 1) return '至少保留一个技能';
+    mon.moves = moves.filter((item) => item !== id);
+    return '已卸下';
+  }
+  if (moves.length >= LOADOUT_LIMIT) return '最多装备 4 个技能';
+  mon.moves = [...moves, id];
+  return '已装备';
+}
+
+export function cycleAspect(mon: Mon): string {
+  const element = TYPE_META[getSpecies(mon.speciesId).type].element;
+  const current = aspectOf(mon);
+  let next: TypeId = getSpecies(mon.speciesId).type;
+  if (element === 'pure') next = current === 'chunyang' ? 'chunyin' : 'chunyang';
+  else {
+    const yin = `yin${element}` as TypeId;
+    const yang = `yang${element}` as TypeId;
+    if (current === yang) next = yin;
+    else if (current === yin && mon.level >= 16) next = 'chunyang';
+    else if (current === 'chunyang') next = 'chunyin';
+    else if (current === 'chunyin') next = yang;
+    else next = yang;
+  }
+  mon.aspect = next;
+  mon.moves = defaultLoadout(mon);
+  return `属性变为${TYPE_META[next].label}`;
+}
+
 export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random): DamageResult {
   if (move.power <= 0) return { damage: 0, mult: 1, stab: false };
-  const mult = effectiveness(move.type, getSpecies(defender.speciesId).type);
-  const stab = move.type === getSpecies(attacker.speciesId).type;
+  const mult = relate(move.type, aspectOf(defender)).mult;
+  const stab = move.type === aspectOf(attacker);
   const atk = combatStat(attacker, 'atk') * stageMul(attacker.stages.atk);
-  const def = Math.max(1, combatStat(defender, 'def') * stageMul(defender.stages.def));
-  const roll = 0.9 + rng() * 0.1;
+  const defStat = combatStat(defender, 'def') * stageMul(defender.stages.def);
+  const def = Math.max(1, move.effect === 'pierce' ? defStat * 0.7 : defStat);
+  const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
+  const roll = 1 - spread + rng() * spread * 2;
   const raw = (((2 * attacker.level) / 5 + 2) * move.power * atk) / def / 32 + 2;
-  const damage = Math.max(1, Math.floor(raw * (stab ? 1.25 : 1) * mult * roll));
+  const damage = Math.max(1, Math.floor(raw * (stab ? 1.2 : 1) * mult * roll));
   return { damage, mult, stab };
 }
 
-export function performMove(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random): string[] {
-  const an = getSpecies(attacker.speciesId).name;
-  const dn = getSpecies(defender.speciesId).name;
-  if (move.kind === 'heal') {
-    const amt = Math.max(4, Math.floor(maxHp(attacker) * 0.35));
-    const before = attacker.hp;
-    attacker.hp = Math.min(maxHp(attacker), attacker.hp + amt);
-    return [`${an}使用了${move.name}`, `${an}恢复了 ${attacker.hp - before} 点体力`];
+export function readDelay(text: string, fast = false): number {
+  if (fast) return 45;
+  const length = Array.from(text).length;
+  return Math.min(4800, Math.max(1500, 800 + length * 70));
+}
+
+function monName(mon: Mon): string {
+  return getSpecies(mon.speciesId).name;
+}
+
+function addShield(fighter: Fighter, ratio: number): number {
+  const cap = Math.floor(maxHp(fighter.mon) * 0.35);
+  const gain = Math.max(1, Math.floor(maxHp(fighter.mon) * ratio));
+  const before = fighter.shield;
+  fighter.shield = Math.min(cap, fighter.shield + gain);
+  return fighter.shield - before;
+}
+
+function cleanse(fighter: Fighter): boolean {
+  const mon = fighter.mon;
+  const had = fighter.dotTurns > 0 || fighter.rootTurns > 0 || mon.stages.atk < 0 || mon.stages.def < 0 || mon.stages.spd < 0;
+  fighter.dotTurns = 0;
+  fighter.rootTurns = 0;
+  if (mon.stages.atk < 0) mon.stages.atk = 0;
+  if (mon.stages.def < 0) mon.stages.def = 0;
+  if (mon.stages.spd < 0) mon.stages.spd = 0;
+  return had;
+}
+
+export function opening(fighter: Fighter): { skip: boolean; logs: string[] } {
+  for (const id of Object.keys(fighter.cd)) {
+    fighter.cd[id] -= 1;
+    if (fighter.cd[id] <= 0) delete fighter.cd[id];
   }
-  if (move.kind === 'buff') {
-    attacker.stages.def = clamp(attacker.stages.def + 1, -3, 3);
-    return [`${an}使用了${move.name}`, `${an}的防御上升了`];
+  if (fighter.rootTurns > 0) {
+    fighter.rootTurns = 0;
+    return { skip: true, logs: [`${monName(fighter.mon)}被定住，这回合无法行动`] };
   }
-  const result = damageOf(attacker, defender, move, rng);
-  defender.hp = Math.max(0, defender.hp - result.damage);
-  const logs = [`${an}使用了${move.name}`, `造成 ${result.damage} 点伤害`];
-  if (result.mult >= 2) logs.push('效果拔群');
-  else if (result.mult <= 0.5) logs.push('效果不太好');
-  if (move.kind === 'debuff' && defender.hp > 0) {
-    defender.stages.atk = clamp(defender.stages.atk - 1, -3, 3);
-    logs.push(`${dn}的攻击下降了`);
+  return { skip: false, logs: [] };
+}
+
+export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: () => number = Math.random): string[] {
+  const an = monName(user.mon);
+  const dn = monName(foe.mon);
+  const logs = [`${an}使用了${move.name}`];
+  if ((user.cd[move.id] ?? 0) > 0) {
+    logs.push(`${move.name}还在冷却`);
+    return logs;
   }
-  if (defender.hp <= 0) logs.push(`${dn}失去了战斗能力`);
+  if (move.cat === 'attack') {
+    const result = damageOf(user.mon, foe.mon, move, rng);
+    const absorbed = Math.min(foe.shield, result.damage);
+    foe.shield -= absorbed;
+    const hpLoss = result.damage - absorbed;
+    foe.mon.hp = Math.max(0, foe.mon.hp - hpLoss);
+    logs.push(`造成 ${result.damage} 点伤害${absorbed ? `，护盾挡下 ${absorbed}` : ''}`);
+    for (const note of relate(move.type, aspectOf(foe.mon)).notes) logs.push(note);
+    if (move.effect === 'recoil' && user.mon.hp > 1) {
+      const recoil = Math.max(1, Math.floor(result.damage * 0.1));
+      user.mon.hp = Math.max(1, user.mon.hp - recoil);
+      logs.push(`${an}受到反震 ${recoil}`);
+    }
+    if (move.effect === 'dotstrike') {
+      foe.dotTurns = Math.max(foe.dotTurns, move.turns);
+      foe.dotRatio = Math.max(foe.dotRatio, 0.06);
+      logs.push(`${dn}被附上持续伤害`);
+    }
+  } else if (move.cat === 'guard') {
+    const gained = addShield(user, move.ratio);
+    logs.push(`${an}获得 ${gained} 点护盾`);
+    if (move.effect === 'ward') {
+      user.mon.stages.def = clamp(user.mon.stages.def + 1, -3, 3);
+      logs.push(`${an}的防御上升了`);
+    }
+    if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
+  } else if (move.cat === 'heal') {
+    if (move.effect === 'hot') {
+      user.hotTurns = move.turns;
+      user.hotRatio = Math.min(0.08, move.ratio);
+      logs.push(`${an}会在 ${move.turns} 回合内持续恢复`);
+    } else {
+      const cap = Math.floor(maxHp(user.mon) * Math.min(0.4, move.ratio));
+      const gain = Math.min(cap, maxHp(user.mon) - user.mon.hp);
+      user.mon.hp += gain;
+      logs.push(gain > 0 ? `${an}恢复了 ${gain} 点体力` : `${an}的体力已经满了`);
+    }
+    if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
+  } else if (move.cat === 'aid') {
+    const stat = move.stat || 'atk';
+    user.mon.stages[stat] = clamp(user.mon.stages[stat] + 1, -3, 3);
+    logs.push(`${an}的${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}上升了`);
+    if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
+  } else if (move.effect === 'root') {
+    if (foe.rootTurns > 0) logs.push(`${dn}正在摆脱控制，没有被连续定住`);
+    else if (rng() < move.chance) {
+      foe.rootTurns = 1;
+      logs.push(`${dn}被定住了`);
+    } else logs.push(`${dn}挣开了控制`);
+  } else {
+    foe.dotTurns = Math.max(foe.dotTurns, move.turns || 2);
+    foe.dotRatio = Math.max(foe.dotRatio, 0.06);
+    const stat = move.stat || 'atk';
+    foe.mon.stages[stat] = clamp(foe.mon.stages[stat] - 1, -3, 3);
+    logs.push(`${dn}陷入持续伤害，${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}下降了`);
+  }
+  if (foe.mon.hp <= 0) logs.push(`${dn}失去了战斗能力`);
+  if (move.cooldown > 0) user.cd[move.id] = move.cooldown;
   return logs;
+}
+
+export function tickStatus(fighter: Fighter): string[] {
+  const mon = fighter.mon;
+  if (mon.hp <= 0) return [];
+  const logs: string[] = [];
+  const name = monName(mon);
+  if (fighter.hotTurns > 0) {
+    const cap = Math.floor(maxHp(mon) * 0.08);
+    const gain = Math.min(cap, maxHp(mon) - mon.hp, Math.max(0, Math.floor(maxHp(mon) * fighter.hotRatio)));
+    mon.hp += gain;
+    fighter.hotTurns -= 1;
+    if (gain > 0) logs.push(`${name}持续恢复了 ${gain} 点体力`);
+  }
+  if (fighter.dotTurns > 0) {
+    const loss = Math.max(1, Math.min(Math.floor(maxHp(mon) * 0.08), Math.floor(maxHp(mon) * Math.max(0.04, fighter.dotRatio))));
+    mon.hp = Math.max(0, mon.hp - loss);
+    fighter.dotTurns -= 1;
+    logs.push(`${name}受到持续伤害 ${loss}`);
+    if (mon.hp <= 0) logs.push(`${name}失去了战斗能力`);
+  }
+  return logs;
+}
+
+export function performMove(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random): string[] {
+  return resolveSkill(blankFighter(attacker), blankFighter(defender), move, rng);
 }
 
 export function catchProbability(catchRate: number, hpRatio: number, timing: Timing): number {
@@ -212,5 +402,7 @@ export function emptyDex(): Record<SpeciesId, { seen: boolean; caught: boolean }
 }
 
 export function moveByIndex(mon: Mon, index: number): MoveDef {
-  return getMove(getSpecies(mon.speciesId).moves[index] ?? getSpecies(mon.speciesId).moves[0]);
+  ensureLoadout(mon);
+  const id = mon.moves?.[index] ?? mon.moves?.[0] ?? getSpecies(mon.speciesId).moves[0];
+  return getMove(id);
 }

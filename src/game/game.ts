@@ -11,13 +11,16 @@ import {
   formatPlay,
   grandmaFollowup,
   grantExp,
+  cycleAspect,
   healTeam,
   judgeTiming,
   makeMon,
   maxHp,
+  readDelay,
   receiveMon,
   setLead,
   timingLabel,
+  toggleEquip,
   topUpBalls,
 } from './logic';
 import { clearSave, readSave, writeSave } from './save';
@@ -40,7 +43,7 @@ import {
 } from './sprites';
 import type { Dir, Mon, PlayState, SpeciesId } from './types';
 import { DRAG_HINT_KEY, MUTE_KEY, START_BALLS } from './types';
-import { hudHtml, mountTouch, renderOverlay, type CaptureView, type EncounterView, type GameHost } from './ui';
+import { hudHtml, mountTouch, renderOverlay, skillResultsHtml, type CaptureView, type EncounterView, type GameHost } from './ui';
 import { COLS, ROWS, TILE, canWalkPixel, createWorld, tileCenter, type NpcDef, type SignDef, type World } from './world';
 
 interface Wild {
@@ -88,6 +91,11 @@ export class Game implements GameHost {
   selectedStarter: SpeciesId | null = null;
   nearbyLabel: string | null = null;
   shakeSuccess = false;
+  skillQuery = '';
+  skillType = 'all';
+  skillTier = 'all';
+  skillCat = 'all';
+  loadoutIndex = 0;
   muted = false;
   battle: Battle | null = null;
   signView: { title: string; text: string } | null = null;
@@ -128,6 +136,8 @@ export class Game implements GameHost {
   private dragPointer: number | null = null;
   private saveTimer = 0;
   private encounterLockUntil = 0;
+  private talkLockUntil = 0;
+  private talkLockId = '';
   private trainerKey: 'qinghe' | 'lanchuan' | null = null;
   private nearby: Nearby | null = null;
   private particles: Particle[] = [];
@@ -169,6 +179,13 @@ export class Game implements GameHost {
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('beforeunload', () => this.persist(true));
     this.overlay.addEventListener('click', (event) => this.onUiClick(event));
+    this.overlay.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.id !== 'skill-q') return;
+      this.skillQuery = target.value.slice(0, 16);
+      const box = document.getElementById('skill-results');
+      if (box) box.innerHTML = skillResultsHtml(this);
+    });
     this.hud.addEventListener('click', (event) => this.onUiClick(event));
     this.resize();
     this.refresh();
@@ -235,7 +252,7 @@ export class Game implements GameHost {
     if (act === 'esc') {
       if (this.mode === 'confirm-reset') act = 'cancel-reset';
       else if (this.mode === 'confirm-new' || this.mode === 'create-name' || this.mode === 'create-starter') act = 'title';
-      else if (this.mode === 'team' || this.mode === 'dex' || this.mode === 'bag' || this.mode === 'quest' || this.mode === 'help') act = 'panel';
+      else if (this.mode === 'team' || this.mode === 'dex' || this.mode === 'bag' || this.mode === 'quest' || this.mode === 'help' || this.mode === 'elements' || this.mode === 'skilldex' || this.mode === 'loadout') act = 'panel';
       else if (this.mode === 'menu' || this.mode === 'sign' || this.mode === 'heal' || this.mode === 'npc') act = 'close';
       else if (this.mode === 'encounter') act = 'encounter-leave';
       else if (this.mode === 'capture') act = 'capture-back';
@@ -324,6 +341,35 @@ export class Game implements GameHost {
           this.persist(true);
           this.toast('领队已更换，它会跟在身后');
         }
+        break;
+      case 'open-loadout':
+        if (this.play && arg) {
+          this.loadoutIndex = Number(arg);
+          this.mode = 'loadout';
+        }
+        break;
+      case 'equip-move':
+        if (this.play && arg) {
+          const mon = this.play.team[this.loadoutIndex];
+          if (mon) this.toast(toggleEquip(mon, arg));
+          this.persist(true);
+        }
+        break;
+      case 'attune':
+        if (this.play && arg) {
+          const mon = this.play.team[Number(arg)];
+          if (mon) this.toast(cycleAspect(mon));
+          this.persist(true);
+        }
+        break;
+      case 'skill-type':
+        this.skillType = arg || 'all';
+        break;
+      case 'skill-tier':
+        this.skillTier = arg || 'all';
+        break;
+      case 'skill-cat':
+        this.skillCat = arg || 'all';
         break;
       case 'encounter-catch':
         this.beginCapture('field');
@@ -667,7 +713,7 @@ export class Game implements GameHost {
 
   private beginJourney(speciesId: SpeciesId): void {
     const spawn = tileCenter(this.world.spawnTile.x, this.world.spawnTile.y);
-    const starter = makeMon(speciesId, 5);
+    const starter = makeMon(speciesId, 5, 1, true);
     const dex = emptyDex();
     dex[speciesId] = { seen: true, caught: true };
     this.play = {
@@ -725,14 +771,16 @@ export class Game implements GameHost {
       if (this.mode === 'explore') this.toast('靠近芽婆婆、告示或驿站门口再交谈');
       return;
     }
+    if (this.nearby.kind === 'npc' && this.nearby.npc.id === this.talkLockId && this.time < this.talkLockUntil) return;
     this.audio.play('menu');
     if (this.nearby.kind === 'npc') {
       this.npcId = this.nearby.npc.id;
       this.mode = 'npc';
     } else if (this.nearby.kind === 'door') this.mode = 'heal';
     else {
-      this.signView = { title: this.nearby.sign.title, text: this.nearby.sign.text };
-      this.mode = 'sign';
+      const sign = this.nearby.sign;
+      this.openDialogue(sign.title, [sign.text]);
+      return;
     }
     this.refresh();
   }
@@ -945,7 +993,7 @@ export class Game implements GameHost {
     else if (battle.result === 'win') line = '野生芽灵退开了。';
     this.battle = null;
     this.trainerKey = null;
-    this.openDialogue('对战', [line], () => this.persist(false), true);
+    this.openDialogue('对战', [line], () => this.persist(false));
   }
 
   private applyTrainerReward(name: string): string {
@@ -1050,12 +1098,13 @@ export class Game implements GameHost {
     return `阅读 · ${nearby.sign.title}`;
   }
 
-  private openDialogue(speaker: string, lines: string[], after?: () => void, auto = false): void {
+  private openDialogue(speaker: string, lines: string[], after?: () => void): void {
+    this.clearTimer();
     const queue = lines.filter(Boolean);
-    this.dialogueState = { speaker, text: queue[0] ?? '……', afterLines: queue.slice(1), after, auto };
+    this.dialogueState = { speaker, text: queue[0] ?? '……', afterLines: queue.slice(1), after, auto: true };
     this.mode = 'dialogue';
     this.refresh();
-    if (auto) this.later(this.fast ? 40 : 1100, () => this.advanceAutoDialogue());
+    this.later(readDelay(this.dialogueState.text, this.fast), () => this.advanceAutoDialogue());
   }
 
   private advanceAutoDialogue(): void {
@@ -1065,22 +1114,25 @@ export class Game implements GameHost {
 
   private advanceDialogue(): void {
     if (!this.dialogueState) return;
+    this.clearTimer();
+    this.logWait = null;
     this.audio.play('tap');
-    const auto = this.dialogueState.auto;
     if (this.dialogueState.afterLines.length) {
       this.dialogueState = {
         ...this.dialogueState,
         text: this.dialogueState.afterLines[0],
         afterLines: this.dialogueState.afterLines.slice(1),
-        auto,
+        auto: true,
       };
       this.refresh();
-      if (auto) this.later(this.fast ? 40 : 1100, () => this.advanceAutoDialogue());
+      this.later(readDelay(this.dialogueState.text, this.fast), () => this.advanceAutoDialogue());
       return;
     }
     const after = this.dialogueState.after;
     this.dialogueState = null;
     this.mode = 'explore';
+    this.talkLockUntil = this.time + 1.1;
+    this.talkLockId = this.npcId ?? '';
     after?.();
     this.refresh();
   }
@@ -1098,11 +1150,12 @@ export class Game implements GameHost {
     this.currentLog = this.logs[this.logIndex] ?? '';
     const last = this.logIndex >= this.logs.length - 1;
     this.refresh();
-    if (!last) this.later(this.fast ? 30 : 820, () => {
+    const wait = readDelay(this.currentLog, this.fast);
+    if (!last) this.later(wait, () => {
       this.logIndex += 1;
       this.revealLog();
     });
-    else this.later(this.fast ? 20 : 520, () => this.finishLog());
+    else this.later(Math.min(wait, this.fast ? 40 : 900), () => this.finishLog());
   }
 
   private skipLog(): void {
@@ -1465,6 +1518,8 @@ export class Game implements GameHost {
     else if (event.code === 'KeyE' || event.code === 'Enter' || event.code === 'Space') this.handle('confirm');
     else if (event.code === 'Digit1') this.handle('battle-move', '0');
     else if (event.code === 'Digit2') this.handle('battle-move', '1');
+    else if (event.code === 'Digit3') this.handle('battle-move', '2');
+    else if (event.code === 'Digit4') this.handle('battle-move', '3');
     else if (event.code === 'KeyM') this.handle('mute');
   };
 

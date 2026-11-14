@@ -1,13 +1,18 @@
-import { effectiveness, getSpecies } from './data';
+import { getSpecies } from './data';
+import { effectiveness } from './elements';
 import {
+  aspectOf,
+  blankFighter,
   combatStat,
   expGain,
   grantExp,
   maxHp,
   moveByIndex,
-  performMove,
+  opening,
+  resolveSkill,
+  tickStatus,
 } from './logic';
-import type { Mon } from './types';
+import type { Fighter, Mon } from './types';
 
 export interface Battle {
   kind: 'wild' | 'trainer';
@@ -18,12 +23,42 @@ export interface Battle {
   fIndex: number;
   phase: 'input' | 'switch' | 'end';
   result?: 'win' | 'lose' | 'run' | 'catch';
+  runtime: Record<string, Fighter>;
 }
 
 export function prepareBattle(player: Mon[], foes: Mon[], kind: Battle['kind'], trainerName: string): Battle {
-  for (const mon of [...player, ...foes]) mon.stages = { atk: 0, def: 0 };
+  const runtime: Record<string, Fighter> = {};
+  for (const mon of [...player, ...foes]) {
+    mon.stages = { atk: 0, def: 0, spd: 0 };
+    runtime[mon.uid] = blankFighter(mon);
+  }
   const pIndex = Math.max(0, player.findIndex((mon) => mon.hp > 0));
-  return { kind, trainerName, player, pIndex, foes, fIndex: 0, phase: player.some((mon) => mon.hp > 0) ? 'input' : 'end', result: player.some((mon) => mon.hp > 0) ? undefined : 'lose' };
+  return {
+    kind,
+    trainerName,
+    player,
+    pIndex,
+    foes,
+    fIndex: 0,
+    phase: player.some((mon) => mon.hp > 0) ? 'input' : 'end',
+    result: player.some((mon) => mon.hp > 0) ? undefined : 'lose',
+    runtime,
+  };
+}
+
+function side(battle: Battle, mon: Mon): Fighter {
+  return battle.runtime[mon.uid] ?? (battle.runtime[mon.uid] = blankFighter(mon));
+}
+
+function clearBody(battle: Battle, mon: Mon): void {
+  mon.stages = { atk: 0, def: 0, spd: 0 };
+  const fighter = side(battle, mon);
+  fighter.shield = 0;
+  fighter.dotTurns = 0;
+  fighter.hotTurns = 0;
+  fighter.rootTurns = 0;
+  fighter.dotRatio = 0;
+  fighter.hotRatio = 0;
 }
 
 function foe(battle: Battle): Mon {
@@ -35,7 +70,7 @@ function me(battle: Battle): Mon {
 }
 
 function checkPlayerDown(battle: Battle): string[] {
-  if (me(battle).hp > 0) return [];
+  if (me(battle).hp > 0 || battle.phase === 'switch' || battle.phase === 'end') return [];
   if (battle.player.some((mon) => mon.hp > 0)) {
     battle.phase = 'switch';
     return ['要换一位还有体力的伙伴上场'];
@@ -46,6 +81,7 @@ function checkPlayerDown(battle: Battle): string[] {
 }
 
 function checkFoeDown(battle: Battle): string[] {
+  if (battle.phase === 'end') return [];
   const current = foe(battle);
   if (current.hp > 0) return [];
   const species = getSpecies(current.speciesId);
@@ -53,7 +89,7 @@ function checkFoeDown(battle: Battle): string[] {
   const next = battle.foes.findIndex((mon, index) => index > battle.fIndex && mon.hp > 0);
   if (next >= 0) {
     battle.fIndex = next;
-    battle.foes[next].stages = { atk: 0, def: 0 };
+    clearBody(battle, battle.foes[next]);
     logs.push(`${battle.trainerName}派出了${getSpecies(battle.foes[next].speciesId).name}`);
     return logs;
   }
@@ -66,14 +102,18 @@ function checkFoeDown(battle: Battle): string[] {
 function chooseEnemyMove(battle: Battle): number {
   const attacker = foe(battle);
   const defender = me(battle);
-  const defType = getSpecies(defender.speciesId).type;
+  const defType = aspectOf(defender);
+  const cd = side(battle, attacker).cd;
   let best = 0;
   let bestScore = -1;
-  getSpecies(attacker.speciesId).moves.forEach((_, index) => {
+  (attacker.moves ?? []).forEach((_, index) => {
     const move = moveByIndex(attacker, index);
-    let score: number;
-    if (move.kind === 'heal') score = attacker.hp <= Math.ceil(maxHp(attacker) * 0.45) ? 78 : 6;
-    else if (move.kind === 'buff') score = attacker.stages.def >= 2 ? 4 : 34;
+    if ((cd[move.id] ?? 0) > 0) return;
+    let score = 1;
+    if (move.cat === 'heal') score = attacker.hp <= Math.ceil(maxHp(attacker) * 0.45) ? 80 : 6;
+    else if (move.cat === 'guard') score = side(battle, attacker).shield > maxHp(attacker) * 0.2 ? 4 : 36;
+    else if (move.cat === 'aid') score = 28;
+    else if (move.cat === 'status') score = side(battle, defender).rootTurns > 0 && move.effect === 'root' ? 2 : 34;
     else score = Math.max(1, move.power) * effectiveness(move.type, defType);
     if (score > bestScore) {
       bestScore = score;
@@ -83,10 +123,17 @@ function chooseEnemyMove(battle: Battle): number {
   return best;
 }
 
+function act(battle: Battle, actor: Mon, target: Mon, moveIndex: number, rng: () => number): string[] {
+  const user = side(battle, actor);
+  const other = side(battle, target);
+  const open = opening(user);
+  if (open.skip) return open.logs;
+  return resolveSkill(user, other, moveByIndex(actor, moveIndex), rng);
+}
+
 function enemyActs(battle: Battle, rng: () => number): string[] {
   if (battle.phase !== 'input' || me(battle).hp <= 0 || foe(battle).hp <= 0) return [];
-  const move = moveByIndex(foe(battle), chooseEnemyMove(battle));
-  const logs = performMove(foe(battle), me(battle), move, rng);
+  const logs = act(battle, foe(battle), me(battle), chooseEnemyMove(battle), rng);
   logs.push(...checkPlayerDown(battle));
   return logs;
 }
@@ -96,13 +143,12 @@ export function playerMove(battle: Battle, moveIndex: number, rng: () => number 
   const attacker = me(battle);
   const defender = foe(battle);
   if (attacker.hp <= 0 || defender.hp <= 0) return [];
-  const move = moveByIndex(attacker, moveIndex);
   const logs: string[] = [];
   const playerFirst = combatStat(attacker, 'spd') >= combatStat(defender, 'spd');
   const foeIndex = battle.fIndex;
   const doPlayer = () => {
     if (battle.phase !== 'input' || attacker.hp <= 0 || foe(battle).hp <= 0) return;
-    logs.push(...performMove(attacker, foe(battle), move, rng));
+    logs.push(...act(battle, attacker, foe(battle), moveIndex, rng));
     logs.push(...checkFoeDown(battle));
   };
   const doEnemy = () => {
@@ -116,6 +162,12 @@ export function playerMove(battle: Battle, moveIndex: number, rng: () => number 
     doEnemy();
     doPlayer();
   }
+  if (battle.phase === 'input') {
+    logs.push(...tickStatus(side(battle, attacker)));
+    logs.push(...tickStatus(side(battle, foe(battle))));
+    logs.push(...checkFoeDown(battle));
+    logs.push(...checkPlayerDown(battle));
+  }
   return logs;
 }
 
@@ -125,8 +177,9 @@ export function playerSwitch(battle: Battle, index: number, rng: () => number = 
   if (!next) return ['没有这位伙伴'];
   if (index === battle.pIndex && battle.phase === 'input') return ['它已经在场上了'];
   if (next.hp <= 0) return ['它已经没有体力了'];
+  clearBody(battle, me(battle));
   battle.pIndex = index;
-  next.stages = { atk: 0, def: 0 };
+  clearBody(battle, next);
   const logs = [`上场吧，${getSpecies(next.speciesId).name}`];
   if (battle.phase === 'switch') {
     battle.phase = 'input';

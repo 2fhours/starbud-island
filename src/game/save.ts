@@ -1,7 +1,8 @@
 import { getSpecies } from './data';
-import { emptyDex, maxHp } from './logic';
-import type { Dir, Mon, PlayState, SpeciesId } from './types';
+import { emptyDex, ensureLoadout, maxHp } from './logic';
+import type { Dir, Mon, PlayState, SpeciesId, TypeId } from './types';
 import { SAVE_KEY } from './types';
+import { TYPE_META } from './elements';
 
 const DIRS = new Set<Dir>(['down', 'up', 'left', 'right']);
 const SPECIES = new Set<SpeciesId>(['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen']);
@@ -12,16 +13,19 @@ function asMon(value: unknown): Mon | null {
   if (typeof raw.speciesId !== 'string' || !SPECIES.has(raw.speciesId as SpeciesId)) return null;
   if (typeof raw.level !== 'number' || raw.level < 1 || raw.level > 30) return null;
   const speciesId = raw.speciesId as SpeciesId;
+  const aspect = typeof raw.aspect === 'string' && raw.aspect in TYPE_META ? raw.aspect as TypeId : getSpecies(speciesId).type;
   const mon: Mon = {
     uid: typeof raw.uid === 'string' ? raw.uid : 'restored',
     speciesId,
     level: Math.floor(raw.level),
     exp: typeof raw.exp === 'number' && raw.exp >= 0 ? Math.floor(raw.exp) : 0,
     hp: typeof raw.hp === 'number' ? Math.floor(raw.hp) : 1,
-    stages: { atk: 0, def: 0 },
+    stages: { atk: 0, def: 0, spd: 0 },
+    aspect,
+    moves: Array.isArray(raw.moves) ? raw.moves.filter((id) => typeof id === 'string') : [],
   };
   mon.hp = Math.max(0, Math.min(maxHp(mon), mon.hp));
-  getSpecies(speciesId);
+  ensureLoadout(mon);
   return mon;
 }
 

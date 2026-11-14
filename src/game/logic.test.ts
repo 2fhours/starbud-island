@@ -32,15 +32,19 @@ describe('芽灵与属性', () => {
     }
   });
 
-  it('克制关系符合草火水与电风岩', () => {
-    expect(effectiveness('water', 'fire')).toBe(2);
-    expect(effectiveness('fire', 'water')).toBe(0.5);
-    expect(effectiveness('grass', 'water')).toBe(2);
-    expect(effectiveness('fire', 'grass')).toBe(2);
-    expect(effectiveness('electric', 'water')).toBe(2);
-    expect(effectiveness('electric', 'wind')).toBe(2);
-    expect(effectiveness('grass', 'rock')).toBe(2);
-    expect(effectiveness('rock', 'electric')).toBe(2);
+  it('五行相克相生有上限，不会叠成秒杀', () => {
+    expect(effectiveness('yinshui', 'yanghuo')).toBe(1.5);
+    expect(effectiveness('yanghuo', 'yinshui')).toBeLessThan(1);
+    expect(effectiveness('yinshui', 'yangmu')).toBeLessThan(1);
+    expect(effectiveness('chunyang', 'chunyin')).toBeLessThanOrEqual(1.6);
+    expect(effectiveness('chunyang', 'chunyin')).toBeGreaterThan(1);
+    for (const attack of ['yinjin', 'yangmu', 'yinshui', 'yanghuo', 'yintu', 'chunyin', 'chunyang'] as const) {
+      for (const defense of ['yinjin', 'yangmu', 'yinshui', 'yanghuo', 'yintu', 'chunyin', 'chunyang'] as const) {
+        const value = effectiveness(attack, defense);
+        expect(value).toBeGreaterThanOrEqual(0.7);
+        expect(value).toBeLessThanOrEqual(1.6);
+      }
+    }
   });
 });
 
@@ -50,8 +54,8 @@ describe('战斗数值', () => {
     const move = getMove(getSpecies('luzhu').moves[0]);
     const superHit = damageOf(attacker, makeMon('yanwei', 8), move, fixed);
     const resist = damageOf(attacker, makeMon('lujiao', 8), move, fixed);
-    expect(superHit.mult).toBe(2);
-    expect(resist.mult).toBe(0.5);
+    expect(superHit.mult).toBe(1.5);
+    expect(resist.mult).toBe(0.85);
     expect(superHit.damage).toBeGreaterThan(resist.damage);
     const bulky = makeMon('yanwei', 8);
     bulky.stages.def = 2;
