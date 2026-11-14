@@ -1258,6 +1258,7 @@ export class Game implements GameHost {
     renderOverlay(this.overlay, this);
     this.hudSig = '';
     this.placeChrome();
+    requestAnimationFrame(() => this.placeChrome());
   }
 
   private placeChrome(): void {
@@ -1269,11 +1270,13 @@ export class Game implements GameHost {
         const left = document.querySelector('.hud-left')?.getBoundingClientRect();
         const right = document.querySelector('.hud-right')?.getBoundingClientRect();
         const below = Math.max(left?.bottom ?? 0, right?.bottom ?? 0);
-        dock.style.top = `${Math.ceil(below + 10)}px`;
-        dock.style.left = '50%';
-        dock.style.right = 'auto';
-        dock.style.bottom = 'auto';
-        dock.style.transform = 'translateX(-50%)';
+        if (below >= 48) {
+          dock.style.top = `${Math.ceil(below + 10)}px`;
+          dock.style.left = '50%';
+          dock.style.right = 'auto';
+          dock.style.bottom = 'auto';
+          dock.style.transform = 'translateX(-50%)';
+        }
       } else {
         dock.style.top = '';
         dock.style.left = '';
@@ -1441,6 +1444,7 @@ export class Game implements GameHost {
     this.canvas.style.width = `${this.viewW}px`;
     this.canvas.style.height = `${this.viewH}px`;
     this.placeChrome();
+    requestAnimationFrame(() => this.placeChrome());
   }
 
   private onUiClick(event: Event): void {

@@ -26,7 +26,7 @@ describe('版本号', () => {
   it('读取 package.json 的版本，不随刷新变化', () => {
     const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(APP_VERSION).toBe(pkg.version);
-    expect(APP_VERSION).toBe('1.3.1');
+    expect(APP_VERSION).toBe('1.3.2');
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

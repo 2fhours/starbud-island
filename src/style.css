@@ -446,7 +446,7 @@ body:not([data-mode="explore"]) .build-tag {
     bottom: calc(16px + env(safe-area-inset-bottom));
   }
   body[data-mode="explore"] .music-dock {
-    top: calc(112px + env(safe-area-inset-top));
+    top: calc(156px + env(safe-area-inset-top));
     left: 50%;
     right: auto;
     bottom: auto;
