@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#7ecfe4" />
+    <meta
+      name="description"
+      content="星芽岛：在原创小岛上散步、认识芽灵、捕捉收集，并进行回合对战的浏览器游戏。"
+    />
+    <title>星芽岛</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view" aria-label="星芽岛游戏画面"></canvas>
+      <div id="hud"></div>
+      <div id="touch"></div>
+      <div id="overlay"></div>
+      <div id="toast" role="status" aria-live="polite"></div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

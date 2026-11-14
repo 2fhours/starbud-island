@@ -1,0 +1,185 @@
+import { describe, expect, it } from 'vitest';
+import { playerMove, playerRun, prepareBattle, resolveCatch } from './battle';
+import { effectiveness, getMove, getSpecies, SPECIES_LIST } from './data';
+import {
+  catchProbability,
+  damageOf,
+  emptyDex,
+  grantExp,
+  healTeam,
+  judgeTiming,
+  makeMon,
+  maxHp,
+  performMove,
+  questObjectives,
+  receiveMon,
+  setLead,
+  topUpBalls,
+} from './logic';
+import { clearSave, readSave, writeSave } from './save';
+import type { Mon, PlayState, SpeciesId } from './types';
+import { createWorld, isWalkable, pathExists, tileCenter } from './world';
+
+const fixed = () => 0.5;
+
+describe('芽灵与属性', () => {
+  it('至少 8 种生物，每种两个技能', () => {
+    expect(SPECIES_LIST.length).toBeGreaterThanOrEqual(8);
+    for (const species of SPECIES_LIST) {
+      expect(species.moves).toHaveLength(2);
+      expect(species.name.length).toBeGreaterThan(1);
+      expect(getMove(species.moves[0]).power + getMove(species.moves[1]).power).toBeGreaterThan(0);
+    }
+  });
+
+  it('克制关系符合草火水与电风岩', () => {
+    expect(effectiveness('water', 'fire')).toBe(2);
+    expect(effectiveness('fire', 'water')).toBe(0.5);
+    expect(effectiveness('grass', 'water')).toBe(2);
+    expect(effectiveness('fire', 'grass')).toBe(2);
+    expect(effectiveness('electric', 'water')).toBe(2);
+    expect(effectiveness('electric', 'wind')).toBe(2);
+    expect(effectiveness('grass', 'rock')).toBe(2);
+    expect(effectiveness('rock', 'electric')).toBe(2);
+  });
+});
+
+describe('战斗数值', () => {
+  it('克制伤害高于抵抗，防御强化会减伤', () => {
+    const attacker = makeMon('luzhu', 8);
+    const move = getMove(getSpecies('luzhu').moves[0]);
+    const superHit = damageOf(attacker, makeMon('yanwei', 8), move, fixed);
+    const resist = damageOf(attacker, makeMon('lujiao', 8), move, fixed);
+    expect(superHit.mult).toBe(2);
+    expect(resist.mult).toBe(0.5);
+    expect(superHit.damage).toBeGreaterThan(resist.damage);
+    const bulky = makeMon('yanwei', 8);
+    bulky.stages.def = 2;
+    expect(damageOf(attacker, bulky, move, fixed).damage).toBeLessThan(superHit.damage);
+  });
+
+  it('治疗不造成伤害，连打可以击败低等级对手', () => {
+    const healer = makeMon('lujiao', 6, 0.4);
+    const before = healer.hp;
+    const logs = performMove(healer, makeMon('dianrong', 3), getMove('guanghe'), fixed);
+    expect(logs.join('')).toContain('光合');
+    expect(healer.hp).toBeGreaterThan(before);
+    const player = [makeMon('lujiao', 8)];
+    const battle = prepareBattle(player, [makeMon('luzhu', 3)], 'wild', '');
+    let guard = 0;
+    while (battle.phase === 'input' && guard < 12) {
+      playerMove(battle, 0, fixed);
+      guard += 1;
+    }
+    expect(battle.result).toBe('win');
+    expect(player[0].level).toBeGreaterThanOrEqual(8);
+  });
+
+  it('训练师战不能逃走，捕捉成功会结束战斗并发放经验', () => {
+    const player = [makeMon('yanke', 5)];
+    const battle = prepareBattle(player, [makeMon('fengling', 4)], 'trainer', '青禾');
+    expect(playerRun(battle).join('')).toContain('挡住');
+    expect(battle.phase).toBe('input');
+    const wild = prepareBattle(player, [makeMon('dianrong', 4, 0.3)], 'wild', '');
+    const logs = resolveCatch(wild, true, fixed);
+    expect(wild.result).toBe('catch');
+    expect(logs.some((line) => line.includes('经验') || line.includes('级'))).toBe(true);
+  });
+});
+
+describe('捕捉、成长与队伍', () => {
+  it('血量越低、时机越好，成功率越高，且落在可读区间', () => {
+    const fullMiss = catchProbability(150, 1, 'miss');
+    const midGood = catchProbability(150, 0.5, 'good');
+    const lowPerfect = catchProbability(150, 0.05, 'perfect');
+    expect(lowPerfect).toBeGreaterThan(midGood);
+    expect(midGood).toBeGreaterThan(fullMiss);
+    for (const value of [fullMiss, midGood, lowPerfect]) {
+      expect(value).toBeGreaterThanOrEqual(0.06);
+      expect(value).toBeLessThanOrEqual(0.92);
+    }
+    expect(judgeTiming(1)).toBe('perfect');
+    expect(judgeTiming(1.12)).toBe('good');
+    expect(judgeTiming(1.7)).toBe('miss');
+  });
+
+  it('经验升级会提高体力上限，治疗和补球能避免卡死', () => {
+    const mon = makeMon('yanwei', 4, 0.5);
+    const beforeMax = maxHp(mon);
+    const logs = grantExp(mon, 500);
+    expect(mon.level).toBeGreaterThan(4);
+    expect(maxHp(mon)).toBeGreaterThan(beforeMax);
+    expect(logs.some((line) => line.includes('级'))).toBe(true);
+    mon.hp = 1;
+    healTeam([mon]);
+    expect(mon.hp).toBe(maxHp(mon));
+    expect(topUpBalls(2)).toBe(8);
+    expect(topUpBalls(12)).toBe(12);
+  });
+
+  it('队伍满员后进入寄存，并可切换领队', () => {
+    const team = (['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling'] as SpeciesId[]).map((id, index) =>
+      makeMon(id, 5 + index),
+    );
+    const box: Mon[] = [];
+    expect(receiveMon(team, box, makeMon('taibei', 6))).toBe('box');
+    expect(team).toHaveLength(6);
+    expect(box).toHaveLength(1);
+    setLead(team, 2);
+    expect(team[0].speciesId).toBe('luzhu');
+  });
+});
+
+describe('存档与地图', () => {
+  it('存档往返后保留进度，损坏数据会被拒绝', () => {
+    const world = createWorld();
+    const start = tileCenter(world.spawnTile.x, world.spawnTile.y);
+    const play: PlayState = {
+      name: '小芽',
+      x: start.x,
+      y: start.y,
+      dir: 'down',
+      team: [makeMon('lujiao', 5)],
+      box: [],
+      dex: emptyDex(),
+      balls: 9,
+      quest: { introduced: true, caughtWild: true, bossDefeated: false, completed: false },
+      pickups: ['balls-south'],
+      trainers: { qinghe: true, lanchuan: false },
+      playMs: 12000,
+    };
+    play.dex.lujiao = { seen: true, caught: true };
+    const memory = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => void memory.set(key, value),
+      removeItem: (key: string) => void memory.delete(key),
+    };
+    expect(writeSave(storage, play)).toBe(true);
+    const loaded = readSave(storage);
+    expect(loaded?.name).toBe('小芽');
+    expect(loaded?.quest.caughtWild).toBe(true);
+    expect(loaded?.team[0].speciesId).toBe('lujiao');
+    expect(loaded?.balls).toBe(9);
+    memory.set('xingya-island-save-v1', '{');
+    expect(readSave(storage)).toBeNull();
+    clearSave(storage);
+    expect(readSave(storage)).toBeNull();
+  });
+
+  it('小镇、治疗点、北林和每只野生芽灵互相走得通', () => {
+    const world = createWorld();
+    expect(isWalkable(world, world.spawnTile.x, world.spawnTile.y)).toBe(true);
+    expect(isWalkable(world, world.door.x, world.door.y)).toBe(true);
+    expect(isWalkable(world, world.bossTile.x, world.bossTile.y)).toBe(true);
+    expect(pathExists(world, world.spawnTile.x, world.spawnTile.y, world.bossTile.x, world.bossTile.y)).toBe(true);
+    expect(pathExists(world, world.spawnTile.x, world.spawnTile.y, world.door.x, world.door.y)).toBe(true);
+    expect(world.spawns.length).toBeGreaterThanOrEqual(12);
+    for (const spawn of world.spawns) {
+      expect(isWalkable(world, spawn.x, spawn.y), spawn.id).toBe(true);
+      expect(pathExists(world, world.spawnTile.x, world.spawnTile.y, spawn.x, spawn.y), spawn.id).toBe(true);
+    }
+    const objectives = questObjectives({ introduced: true, caughtWild: false, bossDefeated: false, completed: false });
+    expect(objectives.filter((item) => item.done)).toHaveLength(1);
+  });
+});
