@@ -166,7 +166,7 @@ function battleSheet(host: GameHost): string {
   const actions = host.mustSwitch
     ? `<p>选择还能战斗的伙伴。</p><div class="party">${switches}</div>`
     : host.canAct
-      ? `<div class="moves">${moves}</div><div class="row"><button class="btn tiny secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn tiny leaf" data-act="battle-catch">捕捉</button><button class="btn tiny secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
+      ? `<div class="moves">${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<p class="auto-note">回合自动继续</p>`;
   return `<section class="sheet battle-sheet"><div class="stage battle-stage" data-type="${esc(foeSpecies.type)}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeSpecies.type)}${hpMarkup(foe.hp, maxHp(foe))}</div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(mySpecies.type)}${hpMarkup(mine.hp, maxHp(mine))}</div></div><div class="actions">${actions}</div></section>`;
 }
@@ -188,24 +188,8 @@ function npcSheet(host: GameHost): string {
 }
 
 export function mountTouch(el: HTMLElement, input: Input, onAct: (act: string) => void): void {
-  el.innerHTML = `<div class="touch-left"><button class="pad" type="button" data-dir="up" aria-label="向上">↑</button><div class="pad-row"><button class="pad" type="button" data-dir="left" aria-label="向左">←</button><div class="joy" id="joy"><div class="knob"></div></div><button class="pad" type="button" data-dir="right" aria-label="向右">→</button></div><button class="pad" type="button" data-dir="down" aria-label="向下">↓</button></div><div class="touch-right"><button type="button" id="btn-touch-menu">菜单</button><button type="button" id="btn-touch-talk">交谈</button></div>`;
-  el.querySelector('#btn-touch-menu')?.addEventListener('click', () => onAct('menu'));
+  el.innerHTML = `<div class="touch-left"><div class="joy" id="joy" role="slider" aria-label="摇杆移动" aria-valuemin="0" aria-valuemax="1"><div class="knob"></div></div></div><div class="touch-right"><button type="button" id="btn-touch-talk">交谈</button></div>`;
   el.querySelector('#btn-touch-talk')?.addEventListener('click', () => onAct('interact'));
-  el.querySelectorAll<HTMLButtonElement>('.pad').forEach((button) => {
-    const dir = button.dataset.dir as 'up' | 'down' | 'left' | 'right' | undefined;
-    if (!dir) return;
-    const press = (event: PointerEvent) => {
-      event.preventDefault();
-      input.dpad[dir] = true;
-      button.setPointerCapture(event.pointerId);
-    };
-    const release = () => {
-      input.dpad[dir] = false;
-    };
-    button.addEventListener('pointerdown', press);
-    button.addEventListener('pointerup', release);
-    button.addEventListener('pointercancel', release);
-  });
   const joy = el.querySelector<HTMLElement>('#joy');
   const knob = el.querySelector<HTMLElement>('.knob');
   if (!joy || !knob) return;
@@ -246,6 +230,6 @@ export function hudHtml(host: GameHost): string {
   const lead = host.play.team[0];
   const species = getSpecies(lead.speciesId);
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
-  const quest = host.play.quest.completed ? '<div class="ribbon">委托完成</div>' : '<div class="ribbon" style="background:#ef6844">委托进行中</div>';
-  return `<div class="hud-left">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}<div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(species.type)}</span>${hpMarkup(lead.hp, maxHp(lead))}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}${quest}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
+  const quest = host.play.quest.completed ? '<small class="quest-chip">委托完成</small>' : '<small class="quest-chip">委托进行中</small>';
+  return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(species.type)}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }

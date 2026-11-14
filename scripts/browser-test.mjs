@@ -49,7 +49,44 @@ async function assertSeparated(page, selectors, label) {
   }
 }
 
-const exploreControls = ['#joy', '#btn-touch-talk', '#btn-touch-menu', '#music-dock', '#build-tag', '.hud-left', '.hud-right'];
+async function assertInside(page, pairs, label) {
+  const result = await page.evaluate((pairs) => {
+    const box = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+    const bad = [];
+    for (const [child, parent] of pairs) {
+      const a = box(child);
+      const b = box(parent);
+      if (!a || !b || a.width < 2 || b.width < 2) {
+        bad.push({ child, parent, missing: true });
+        continue;
+      }
+      if (a.left < b.left - 1 || a.right > b.right + 1 || a.top < b.top - 1 || a.bottom > b.bottom + 1) {
+        const round = (r) => ({ left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width), height: Math.round(r.height) });
+        bad.push({ child, parent, childBox: round(a), parentBox: round(b) });
+      }
+    }
+    return bad;
+  }, pairs);
+  if (result.length) throw new Error(`${label} 子元素超出容器 ${JSON.stringify(result)}`);
+}
+
+async function assertBattleGap(page, label) {
+  const gap = await page.evaluate(() => {
+    const shadow = (el) => {
+      const match = getComputedStyle(el).boxShadow.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+      return match ? Math.max(0, Number(match[2])) : 0;
+    };
+    const skills = [...document.querySelectorAll('[data-act="battle-move"]')];
+    const actions = [...document.querySelectorAll('[data-act="toggle-switch"], [data-act="battle-catch"], [data-act="battle-run"]')];
+    if (!skills.length || !actions.length) return -1;
+    const skillBottom = Math.max(...skills.map((el) => el.getBoundingClientRect().bottom + shadow(el)));
+    const actionTop = Math.min(...actions.map((el) => el.getBoundingClientRect().top));
+    return actionTop - skillBottom;
+  });
+  if (gap < 10) throw new Error(`${label} 技能和行动按钮间距只有 ${gap}`);
+}
+
+const exploreControls = ['#joy', '#btn-touch-talk', '#music-dock', '#build-tag', '.hud-left', '.hud-right'];
 
 async function waitForServer() {
   for (let i = 0; i < 40; i += 1) {
@@ -284,6 +321,27 @@ try {
   });
   if (!encounterDock) throw new Error('竖屏音乐控件挡住了捕捉、对战或离开');
   await page.screenshot({ path: `${shotDir}/04c-encounter-mobile.png` });
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await sleep(120);
+    await page.screenshot({ path: `${shotDir}/encounter-${width}x${height}.png` });
+    await assertInside(page, [['.stage canvas', '.stage']], `遭遇图片 ${width}x${height}`);
+    const encounterFit = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('[data-act="encounter-catch"], [data-act="encounter-fight"], [data-act="encounter-leave"]')];
+      const sheet = document.querySelector('.encounter-sheet');
+      const boxes = buttons.map((el) => el.getBoundingClientRect());
+      const hit = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+      const overlaps = [];
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) if (hit(boxes[i], boxes[j])) overlaps.push([i, j]);
+      }
+      const off = boxes.filter((r) => r.bottom > window.innerHeight + 1 || r.top < -1 || r.right > window.innerWidth + 1 || r.left < -1).length;
+      return { overlaps, off, scrollable: !!sheet && sheet.scrollHeight > sheet.clientHeight + 2 };
+    });
+    if (encounterFit.overlaps.length || encounterFit.off) {
+      throw new Error(`遭遇按钮挤在一起或出屏 ${width}x${height} ${JSON.stringify(encounterFit)}`);
+    }
+  }
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
   await page.click('[data-act="encounter-leave"]');
   await sleep(800);
@@ -300,8 +358,23 @@ try {
   await page.waitForSelector('[data-act="encounter-catch"]', { timeout: 4000 });
   await page.click('[data-act="encounter-catch"]');
   await page.waitForSelector('#catch-ring');
+  await assertInside(page, [['#catch-ring', '.sheet']], '捕捉圈');
   await sleep(80);
   await page.screenshot({ path: `${shotDir}/05-capture.png` });
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(80);
+    await assertInside(page, [['#catch-ring', '.sheet']], `捕捉圈 ${width}x${height}`);
+    const captureFit = await page.evaluate(() => {
+      return ['throw', 'capture-back'].map((act) => {
+        const box = document.querySelector(`[data-act="${act}"]`).getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= window.innerHeight + 1 && box.height >= 36;
+      });
+    });
+    if (captureFit.some((ok) => !ok)) throw new Error(`捕捉按钮不在画面内 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/capture-${width}x${height}.png` });
+  }
+  await page.setViewport({ width: 1280, height: 800 });
   await page.click('[data-act="throw"]');
   await page.waitForSelector('[data-act="dialogue-next"]', { timeout: 4000 });
   for (let i = 0; i < 8; i += 1) {
@@ -342,11 +415,67 @@ try {
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
   await page.setViewport({ width: 390, height: 844 });
   await sleep(150);
-  await assertSeparated(page, battleControls, '竖屏战斗');
-  await page.setViewport({ width: 844, height: 390 });
-  await sleep(150);
-  await assertSeparated(page, battleControls, '横屏战斗');
+  await page.evaluate(() => {
+    const log = document.querySelector('.log');
+    if (log) log.textContent = '野生的焰尾狐甩出很长的尾焰，火星一路溅到叶角鹿身上，这一回合的结果需要完整看完，不能把按钮顶出屏幕。';
+  });
+  await page.evaluate(() => {
+    const el = document.getElementById('toast');
+    el.textContent = '进度已保存在这台设备';
+    el.classList.add('show');
+  });
+  await assertSeparated(page, [...battleControls, '#toast'], '竖屏战斗');
+  await assertBattleGap(page, '竖屏战斗');
+  await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom'], ['.log', '.battle-sheet']], '竖屏战斗图片');
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(150);
+    await assertSeparated(page, [...battleControls, '#toast'], `战斗 ${width}x${height}`);
+    await assertBattleGap(page, `战斗 ${width}x${height}`);
+    await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom'], ['.log', '.battle-sheet']], `战斗图片 ${width}x${height}`);
+    const logFit = await page.evaluate(() => {
+      const log = document.querySelector('.log');
+      const pet = document.querySelector('.battle-bottom');
+      if (!log || !pet) return { gap: -1, line: 0 };
+      const style = getComputedStyle(log);
+      const padTop = parseFloat(style.paddingTop) || 0;
+      const padBottom = parseFloat(style.paddingBottom) || 0;
+      const box = log.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(log);
+      const contentTop = box.top + padTop;
+      const contentBottom = box.bottom - padBottom;
+      const line = Math.max(0, ...[...range.getClientRects()].map((rect) => Math.min(rect.bottom, contentBottom) - Math.max(rect.top, contentTop)));
+      return { gap: pet.getBoundingClientRect().top - box.bottom, line };
+    });
+    if (logFit.gap < 6 || logFit.line < 12) throw new Error(`战斗日志挤到伙伴信息上 ${width}x${height} ${JSON.stringify(logFit)}`);
+    await page.screenshot({ path: `${shotDir}/battle-${width}x${height}.png` });
+  }
   await page.screenshot({ path: `${shotDir}/06b-battle-landscape.png` });
+  await page.addStyleTag({ content: 'body.font-boost, body.font-boost button, body.font-boost .hud-copy strong { font-size: 20px; }' });
+  await page.evaluate(() => document.body.classList.add('font-boost'));
+  for (const [width, height] of [[320, 568], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(120);
+    await assertBattleGap(page, `大字战斗 ${width}x${height}`);
+    await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom']], `大字战斗图片 ${width}x${height}`);
+    const boost = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('[data-act="battle-move"], [data-act="battle-catch"], [data-act="battle-run"], [data-act="toggle-switch"]')];
+      const sheet = document.querySelector('.battle-sheet');
+      const hit = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+      const boxes = buttons.map((el) => el.getBoundingClientRect());
+      const overlaps = [];
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) if (hit(boxes[i], boxes[j])) overlaps.push([i, j]);
+      }
+      const off = boxes.filter((r) => r.bottom > window.innerHeight + 1 || r.top < -1 || r.right > window.innerWidth + 1 || r.left < -1).length;
+      return { overlaps, off, scrollable: !!sheet && sheet.scrollHeight > sheet.clientHeight + 2 };
+    });
+    if (boost.overlaps.length || (boost.off && !boost.scrollable)) {
+      throw new Error(`大字战斗按钮挤在一起或出屏 ${width}x${height} ${JSON.stringify(boost)}`);
+    }
+  }
+  await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.setViewport({ width: 1280, height: 800 });
   if (await page.$('[data-act="log-next"]')) throw new Error('战斗仍显示需要点击的继续按钮');
   await page.click('[data-act="battle-move"]');
@@ -385,9 +514,23 @@ try {
   await page.click('[data-act="menu"]');
   await page.click('[data-arg="team"]');
   await page.screenshot({ path: `${shotDir}/07-team.png` });
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(80);
+    await assertInside(page, [['.mon-card canvas', '.mon-card']], `队伍图片 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/team-${width}x${height}.png` });
+  }
+  await page.setViewport({ width: 1280, height: 800 });
   await page.click('[data-arg="menu"]');
   await page.click('[data-arg="dex"]');
   await page.screenshot({ path: `${shotDir}/08-dex.png` });
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(80);
+    await assertInside(page, [['.dex-card canvas', '.dex-card']], `图鉴图片 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/dex-${width}x${height}.png` });
+  }
+  await page.setViewport({ width: 1280, height: 800 });
   await page.click('[data-arg="menu"]');
   await page.click('[data-act="save"]');
   await page.click('[data-act="title"]');
@@ -406,7 +549,7 @@ try {
   if (!touchVisible) throw new Error('窄屏没有显示触控操作');
   const dockClear = await page.evaluate(() => {
     const dock = document.querySelector('#music-dock').getBoundingClientRect();
-    const blocks = ['#btn-touch-talk', '#btn-touch-menu', '.joy', '.pad'].map((sel) => document.querySelector(sel).getBoundingClientRect());
+    const blocks = ['#btn-touch-talk', '#joy'].map((sel) => document.querySelector(sel).getBoundingClientRect());
     const hit = (a, b) => !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
     return dock.width > 40 && dock.height > 16 && blocks.every((box) => !hit(dock, box));
   });
@@ -415,7 +558,23 @@ try {
     await page.setViewport({ width, height });
     await sleep(120);
     await assertSeparated(page, exploreControls, `探索 ${width}x${height}`);
+    await page.evaluate(() => {
+      const el = document.getElementById('toast');
+      el.textContent = '在地图上按住拖动就能走路，松开即停';
+      el.classList.add('show');
+    });
+    await assertSeparated(page, ['#toast', '#joy', '#btn-touch-talk', '#music-dock', '#build-tag', '.hud-left', '.hud-right'], `提示 ${width}x${height}`);
+    await assertInside(page, [['.hud-left .hp', '.hud-left'], ['.hud-left canvas', '.hud-left'], ['.hud-right button', '.hud-right']], `血条 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/explore-${width}x${height}.png` });
   }
+  await page.evaluate(() => document.body.classList.add('font-boost'));
+  for (const [width, height] of [[320, 568], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(120);
+    await assertSeparated(page, exploreControls, `大字探索 ${width}x${height}`);
+    await assertInside(page, [['.hud-left .hp', '.hud-left'], ['.hud-left canvas', '.hud-left'], ['.hud-right button', '.hud-right']], `大字血条 ${width}x${height}`);
+  }
+  await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.screenshot({ path: `${shotDir}/11-landscape.png` });
 
   await page.setViewport({ width: 1280, height: 800 });

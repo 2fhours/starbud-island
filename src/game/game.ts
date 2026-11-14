@@ -1257,6 +1257,41 @@ export class Game implements GameHost {
     document.body.dataset.mode = this.mode;
     renderOverlay(this.overlay, this);
     this.hudSig = '';
+    this.placeChrome();
+  }
+
+  private placeChrome(): void {
+    const dock = document.querySelector<HTMLElement>('#music-dock');
+    const toast = document.getElementById('toast');
+    const explore = this.mode === 'explore';
+    if (dock) {
+      if (explore) {
+        const left = document.querySelector('.hud-left')?.getBoundingClientRect();
+        const right = document.querySelector('.hud-right')?.getBoundingClientRect();
+        const below = Math.max(left?.bottom ?? 0, right?.bottom ?? 0);
+        dock.style.top = `${Math.ceil(below + 10)}px`;
+        dock.style.left = '50%';
+        dock.style.right = 'auto';
+        dock.style.bottom = 'auto';
+        dock.style.transform = 'translateX(-50%)';
+      } else {
+        dock.style.top = '';
+        dock.style.left = '';
+        dock.style.right = '';
+        dock.style.bottom = '';
+        dock.style.transform = '';
+      }
+    }
+    if (toast && explore) {
+      const joy = document.querySelector('#joy')?.getBoundingClientRect();
+      if (joy && joy.height > 2) {
+        toast.style.top = 'auto';
+        toast.style.bottom = `${Math.ceil(window.innerHeight - joy.top + 14)}px`;
+      }
+    } else if (toast) {
+      toast.style.top = '';
+      toast.style.bottom = '';
+    }
   }
 
   private toast(message: string): void {
@@ -1405,6 +1440,7 @@ export class Game implements GameHost {
     this.canvas.height = Math.max(1, Math.floor(this.viewH * dpr));
     this.canvas.style.width = `${this.viewW}px`;
     this.canvas.style.height = `${this.viewH}px`;
+    this.placeChrome();
   }
 
   private onUiClick(event: Event): void {

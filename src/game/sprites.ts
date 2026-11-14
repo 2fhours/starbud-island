@@ -76,18 +76,26 @@ function cheek(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 }
 
 function lockBox(canvas: HTMLCanvasElement, cssW: number, cssH: number): { w: number; h: number; dpr: number } {
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
+  canvas.style.boxSizing = 'border-box';
+  canvas.style.width = `min(${cssW}px, 100%)`;
   canvas.style.maxWidth = '100%';
+  canvas.style.maxHeight = '100%';
+  canvas.style.height = 'auto';
+  canvas.style.aspectRatio = `${cssW} / ${cssH}`;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const bitmap = canvasBitmapSize(cssW, cssH, dpr);
+  const w = Math.max(1, Math.min(cssW, Math.round(canvas.clientWidth || cssW)));
+  const h = Math.max(1, Math.min(cssH, Math.round(canvas.clientHeight || Math.round(cssH * (w / cssW)))));
+  const bitmap = canvasBitmapSize(w, h, dpr);
   if (canvas.width !== bitmap.w || canvas.height !== bitmap.h) {
     canvas.width = bitmap.w;
     canvas.height = bitmap.h;
-    canvas.style.width = `${cssW}px`;
-    canvas.style.height = `${cssH}px`;
+    canvas.style.width = `min(${cssW}px, 100%)`;
+    canvas.style.maxWidth = '100%';
+    canvas.style.maxHeight = '100%';
+    canvas.style.height = 'auto';
+    canvas.style.aspectRatio = `${cssW} / ${cssH}`;
   }
-  return { w: cssW, h: cssH, dpr: bitmap.w / cssW };
+  return { w, h, dpr: bitmap.w / w };
 }
 
 function fallbackCreature(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -615,8 +623,17 @@ export function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number
 
 export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: number, faint = false): void {
   const fit = canvas.dataset.fit;
-  const short = window.innerHeight < 700;
-  const css = fit === 'hud' ? { w: 64, h: 64 } : fit === 'card' ? { w: 88, h: 88 } : short ? { w: 112, h: 100 } : PORTRAIT_CSS;
+  const css = fit === 'hud' ? { w: 48, h: 48 } : fit === 'card' ? { w: 72, h: 72 } : { w: 132, h: 116 };
+  const stage = canvas.closest('.stage');
+  const parent = (stage ?? canvas.parentElement)?.getBoundingClientRect();
+  if (parent && parent.width > 8 && parent.height > 8) {
+    const maxW = fit === 'stage' ? Math.min(parent.width * 0.46, parent.width) : parent.width;
+    css.w = Math.max(24, Math.min(css.w, maxW));
+    css.h = Math.max(24, Math.min(css.h, Math.max(24, parent.height - 4)));
+    const aspect = fit === 'stage' ? 132 / 116 : 1;
+    if (css.w / css.h > aspect) css.w = css.h * aspect;
+    else css.h = css.w / aspect;
+  }
   const box = lockBox(canvas, css.w, css.h);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -640,10 +657,8 @@ export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: nu
 }
 
 export function paintRing(canvas: HTMLCanvasElement, scale: number): void {
-  const locked = Number(canvas.dataset.boxW);
-  const measured = locked || Math.min(240, Math.max(120, canvas.clientWidth || 220));
-  if (!locked) canvas.dataset.boxW = String(measured);
-  const box = lockBox(canvas, measured, measured);
+  const edge = Math.max(72, Math.min(200, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.28)));
+  const box = lockBox(canvas, edge, edge);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.setTransform(box.dpr, 0, 0, box.dpr, 0, 0);
