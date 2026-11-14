@@ -57,8 +57,9 @@ function typePill(type: string): string {
   return `<span class="type" style="background:${meta.color}">${meta.label}</span>`;
 }
 
-function portrait(id: SpeciesId, faint = false): string {
-  return `<canvas data-species="${id}" data-faint="${faint ? '1' : '0'}" width="96" height="96"></canvas>`;
+function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'hud' = 'card'): string {
+  const size = fit === 'stage' ? [156, 138] : fit === 'hud' ? [64, 64] : [88, 88];
+  return `<canvas class="portrait portrait-${fit}" data-fit="${fit}" data-species="${id}" data-faint="${faint ? '1' : '0'}" width="${size[0]}" height="${size[1]}" aria-hidden="true"></canvas>`;
 }
 
 export function renderOverlay(root: HTMLElement, host: GameHost): void {
@@ -81,7 +82,7 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
     inner = `<section class="sheet"><p class="eyebrow">${esc(host.dialogue.speaker)}</p><p>${esc(host.dialogue.text)}</p><button class="btn" data-act="dialogue-next">继续</button></section>`;
   } else if (mode === 'encounter' && host.encounterView) {
     const view = host.encounterView;
-    inner = `<section class="sheet"><p class="eyebrow">野生芽灵</p><h2>${esc(view.name)}</h2>${portrait(view.speciesId)}<p>${typePill(view.type)} ${view.level} 级</p>${hpMarkup(view.hp, view.max)}<p>可以邀请它同行，也可以先比试。体力越低，星芽球越容易成功。</p><div class="stack"><button class="btn leaf" data-act="encounter-catch">捕捉</button><button class="btn" data-act="encounter-fight">对战</button><button class="btn secondary" data-act="encounter-leave">先离开</button></div></section>`;
+    inner = `<section class="sheet encounter-sheet"><p class="eyebrow">野生芽灵</p><h2>${esc(view.name)}</h2><div class="stage" data-type="${esc(view.type)}">${portrait(view.speciesId, false, 'stage')}</div><p>${typePill(view.type)} ${view.level} 级</p>${hpMarkup(view.hp, view.max)}<p>可以邀请它同行，也可以先比试。体力越低，星芽球越容易成功。</p><div class="stack actions"><button class="btn leaf" data-act="encounter-catch">捕捉</button><button class="btn" data-act="encounter-fight">对战</button><button class="btn secondary" data-act="encounter-leave">先离开</button></div></section>`;
   } else if (mode === 'capture' && host.captureView) {
     const view = host.captureView;
     inner = `<section class="sheet"><p class="eyebrow">星芽球 × ${view.balls}</p><h2>捕捉 ${esc(view.name)}</h2><div class="ring-wrap"><canvas id="catch-ring" width="240" height="240"></canvas></div><p id="catch-odds">等光环缩到绿圈上再投掷。</p>${hpMarkup(view.hp, view.max)}<div class="row"><button class="btn leaf" data-act="throw">投掷</button><button class="btn secondary" data-act="capture-back">先不扔</button></div><p class="fine">空格或交谈键也可以投掷。完美时机会明显提高成功率。</p></section>`;
@@ -101,7 +102,7 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
     const items = questObjectives(host.play.quest);
     inner = `<section class="sheet"><h2>芽婆婆的委托</h2>${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
   } else if (mode === 'help') {
-    inner = `<section class="sheet"><h2>操作说明</h2><p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 和 2 使用技能。</p><p>手机：左下角摇杆或方向按钮移动，右下角是交谈和菜单。</p><p>草克水，水克火，火克草。电擅长对付水和风，岩又硬又慢。靠近会走路的芽灵就会遇见它们。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+    inner = `<section class="sheet"><h2>操作说明</h2><p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 和 2 使用技能。</p><p>手机：左下角摇杆或方向按钮移动，右下角是交谈和菜单。</p><p>背景音乐可以在画面上的音乐开关和音量条里调整。关闭后会记住，刷新也不会自己打开。</p><p>草克水，水克火，火克草。电擅长对付水和风，岩又硬又慢。靠近会走路的芽灵就会遇见它们。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
   } else if (mode === 'confirm-reset') {
     inner = `<section class="sheet"><h2>清除这台设备上的存档？</h2><p>伙伴、图鉴、星芽球和委托进度都会消失。此操作不能撤销。</p><div class="row"><button class="btn" data-act="confirm-reset">确认清除</button><button class="btn secondary" data-act="cancel-reset">再想想</button></div></section>`;
   } else if (mode === 'npc' && host.npcId && host.play) {
@@ -167,7 +168,7 @@ function battleSheet(host: GameHost): string {
     : host.canAct
       ? `<div class="moves">${moves}</div><div class="row"><button class="btn tiny secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn tiny leaf" data-act="battle-catch">捕捉</button><button class="btn tiny secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<button class="btn" data-act="log-next">继续</button>`;
-  return `<section class="sheet"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeSpecies.type)}${hpMarkup(foe.hp, maxHp(foe))}</div>${portrait(foe.speciesId, foe.hp <= 0)}</div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(mySpecies.type)}${hpMarkup(mine.hp, maxHp(mine))}</div></div>${actions}</section>`;
+  return `<section class="sheet battle-sheet"><div class="stage battle-stage" data-type="${esc(foeSpecies.type)}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeSpecies.type)}${hpMarkup(foe.hp, maxHp(foe))}</div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(mySpecies.type)}${hpMarkup(mine.hp, maxHp(mine))}</div></div><div class="actions">${actions}</div></section>`;
 }
 
 function npcSheet(host: GameHost): string {
@@ -246,5 +247,5 @@ export function hudHtml(host: GameHost): string {
   const species = getSpecies(lead.speciesId);
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
   const quest = host.play.quest.completed ? '<div class="ribbon">委托完成</div>' : '<div class="ribbon" style="background:#ef6844">委托进行中</div>';
-  return `<div class="hud-left">${portrait(lead.speciesId, lead.hp <= 0)}<div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(species.type)}</span>${hpMarkup(lead.hp, maxHp(lead))}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}${quest}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
+  return `<div class="hud-left">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}<div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(species.type)}</span>${hpMarkup(lead.hp, maxHp(lead))}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}${quest}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }

@@ -1,4 +1,4 @@
-import { Sfx } from './audio';
+import { AudioEngine } from './audio';
 import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type Battle } from './battle';
 import { bossScript, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
@@ -103,7 +103,7 @@ export class Game implements GameHost {
   private readonly hud: HTMLElement;
   private readonly overlay: HTMLElement;
   private readonly input = new Input();
-  private readonly sfx = new Sfx();
+  private readonly audio = new AudioEngine();
   private readonly world: World;
   private readonly fast: boolean;
   private viewW = 800;
@@ -144,7 +144,13 @@ export class Game implements GameHost {
     this.world = createWorld();
     this.fast = new URLSearchParams(location.search).has('test');
     this.muted = localStorage.getItem(MUTE_KEY) === '1';
-    this.sfx.muted = this.muted;
+    this.audio.sfxMuted = this.muted;
+    this.mountMusicDock();
+    document.addEventListener('visibilitychange', () => this.audio.setAudible(document.visibilityState === 'visible'));
+    window.addEventListener('blur', () => this.audio.setAudible(false));
+    window.addEventListener('focus', () => {
+      if (document.visibilityState === 'visible') this.audio.setAudible(true);
+    });
     this.resetWilds();
     this.refreshSummary();
     mountTouch(opts.touch, this.input, (act) => this.handle(act));
@@ -164,6 +170,18 @@ export class Game implements GameHost {
       this.last = now;
       this.frame(now);
     });
+  }
+
+  get audioState() {
+    return this.audio.debug();
+  }
+
+  setPageAudible(on: boolean): void {
+    this.audio.setAudible(on);
+  }
+
+  exerciseMusic(times: number): void {
+    for (let i = 0; i < times; i += 1) this.audio.sync(i % 2 === 0 ? 'battle' : 'explore');
   }
 
   get canAct(): boolean {
@@ -215,7 +233,7 @@ export class Game implements GameHost {
       else return;
       if (act === 'panel') arg = 'menu';
     }
-    this.sfx.unlock();
+    this.audio.unlock();
     switch (act) {
       case 'new-game':
         this.mode = this.saveExists ? 'confirm-new' : 'create-name';
@@ -286,7 +304,7 @@ export class Game implements GameHost {
         break;
       case 'mute':
         this.muted = !this.muted;
-        this.sfx.muted = this.muted;
+        this.audio.sfxMuted = this.muted;
         localStorage.setItem(MUTE_KEY, this.muted ? '1' : '0');
         break;
       case 'set-lead':
@@ -352,6 +370,7 @@ export class Game implements GameHost {
     const dt = Math.min(0.033, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
+    this.audio.sync(this.mode);
     this.update(dt);
     this.render();
     requestAnimationFrame(this.frame);
@@ -487,6 +506,8 @@ export class Game implements GameHost {
   private render(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = 'high';
     this.ctx.clearRect(0, 0, this.viewW, this.viewH);
     const x0 = Math.max(0, Math.floor(this.camX / TILE) - 1);
     const y0 = Math.max(0, Math.floor(this.camY / TILE) - 1);
@@ -581,7 +602,7 @@ export class Game implements GameHost {
   private drawMinimap(): void {
     const size = 132;
     const x = this.viewW - size - 16;
-    const y = this.viewH - size - 16;
+    const y = this.viewH - size - 36;
     this.ctx.fillStyle = 'rgba(255,248,239,0.88)';
     this.ctx.beginPath();
     this.ctx.roundRect(x - 6, y - 6, size + 12, size + 12, 16);
@@ -692,7 +713,7 @@ export class Game implements GameHost {
       if (this.mode === 'explore') this.toast('靠近芽婆婆、告示或驿站门口再交谈');
       return;
     }
-    this.sfx.play('menu');
+    this.audio.play('menu');
     if (this.nearby.kind === 'npc') {
       this.npcId = this.nearby.npc.id;
       this.mode = 'npc';
@@ -711,7 +732,7 @@ export class Game implements GameHost {
     this.play.balls = topUpBalls(this.play.balls);
     const extra = this.play.balls > before ? `星芽球补到了 ${this.play.balls} 个。` : '星芽球还够用。';
     this.burst(this.play.x, this.play.y - 20, ['#8ee08a', '#fff', '#f0b429']);
-    this.sfx.play('heal');
+    this.audio.play('heal');
     this.openDialogue(speaker, ['伙伴们恢复了精神。', extra], () => this.persist(true));
   }
 
@@ -721,7 +742,7 @@ export class Game implements GameHost {
     if (ready) {
       this.play.quest.completed = true;
       this.burst(this.play.x, this.play.y - 30, ['#ef6844', '#f0b429', '#2f9a5a', '#fff']);
-      this.sfx.play('level');
+      this.audio.play('level');
     }
     this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest), () => this.persist(false));
   }
@@ -788,7 +809,7 @@ export class Game implements GameHost {
     this.shakeSuccess = success;
     this.pendingThrow = { success, timing, chance };
     this.mode = 'shake';
-    this.sfx.play(success ? 'catch' : 'fail');
+    this.audio.play(success ? 'catch' : 'fail');
     this.refresh();
     this.later(this.fast ? 30 : 1100, () => this.finishThrow());
   }
@@ -869,7 +890,7 @@ export class Game implements GameHost {
   private doMove(index: number): void {
     if (!this.canAct || !this.battle) return;
     const logs = playerMove(this.battle, index, () => this.rng());
-    this.sfx.play('hit');
+    this.audio.play('hit');
     this.beginLogs(logs, () => {
       if (this.battle?.phase === 'end') this.finishBattle();
     });
@@ -921,7 +942,7 @@ export class Game implements GameHost {
       if (!this.play.trainers.qinghe) {
         this.play.trainers.qinghe = true;
         this.play.balls += 3;
-        this.sfx.play('level');
+        this.audio.play('level');
         return `${name}点到为止。你学会了怎么对战，并得到 3 个星芽球。`;
       }
       return `${name}说你已经很熟练了。`;
@@ -931,7 +952,7 @@ export class Game implements GameHost {
         this.play.trainers.lanchuan = true;
         this.play.quest.bossDefeated = true;
         this.play.balls += 5;
-        this.sfx.play('level');
+        this.audio.play('level');
         return '试炼通过了。岚川留下 5 个星芽球，让你回去告诉芽婆婆。';
       }
       return '岚川认可了这次再战。';
@@ -949,7 +970,7 @@ export class Game implements GameHost {
     healTeam(this.play.team);
     this.play.balls = topUpBalls(this.play.balls);
     this.encounterLockUntil = this.time + 1;
-    this.sfx.play('heal');
+    this.audio.play('heal');
     this.openDialogue('芽婆婆', ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。'], () => this.persist(true));
   }
 
@@ -993,7 +1014,7 @@ export class Game implements GameHost {
         this.play.pickups.push(pickup.id);
         this.play.balls += pickup.balls;
         this.toast(`捡到 ${pickup.balls} 个星芽球`);
-        this.sfx.play('tap');
+        this.audio.play('tap');
         this.persist(true);
       }
     }
@@ -1026,7 +1047,7 @@ export class Game implements GameHost {
 
   private advanceDialogue(): void {
     if (!this.dialogueState) return;
-    this.sfx.play('tap');
+    this.audio.play('tap');
     if (this.dialogueState.afterLines.length) {
       this.dialogueState = {
         ...this.dialogueState,
@@ -1192,6 +1213,41 @@ export class Game implements GameHost {
     return Math.random();
   }
 
+  private mountMusicDock(): void {
+    const button = document.querySelector('#music-toggle');
+    const slider = document.querySelector('#music-volume');
+    if (button instanceof HTMLButtonElement) {
+      button.addEventListener('click', () => {
+        this.audio.unlock();
+        this.audio.setMusicOn(!this.audio.musicEnabled);
+        this.paintMusicDock();
+      });
+    }
+    if (slider instanceof HTMLInputElement) {
+      slider.value = String(this.audio.volumePercent);
+      slider.addEventListener('input', () => {
+        this.audio.unlock();
+        this.audio.setVolume(Number(slider.value));
+        this.paintMusicDock();
+      });
+    }
+    this.paintMusicDock();
+  }
+
+  private paintMusicDock(): void {
+    const button = document.querySelector('#music-toggle');
+    const slider = document.querySelector('#music-volume');
+    if (button instanceof HTMLButtonElement) {
+      button.setAttribute('aria-pressed', this.audio.musicEnabled ? 'true' : 'false');
+      button.setAttribute('aria-label', this.audio.musicEnabled ? '关闭背景音乐' : '打开背景音乐');
+      button.textContent = this.audio.musicEnabled ? '音乐' : '音乐关';
+    }
+    if (slider instanceof HTMLInputElement && document.activeElement !== slider) {
+      slider.value = String(this.audio.volumePercent);
+      slider.setAttribute('aria-valuenow', String(this.audio.volumePercent));
+    }
+  }
+
   private resize(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.viewW = window.innerWidth;
@@ -1212,6 +1268,7 @@ export class Game implements GameHost {
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
+    this.audio.unlock();
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     this.input.keys.add(event.code);
     if (event.repeat) return;

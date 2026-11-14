@@ -22,6 +22,11 @@
       <div id="touch"></div>
       <div id="overlay"></div>
       <div id="toast" role="status" aria-live="polite"></div>
+      <div id="music-dock" class="music-dock">
+        <button type="button" id="music-toggle" aria-pressed="true" aria-label="关闭背景音乐">音乐</button>
+        <input id="music-volume" type="range" min="0" max="100" value="70" aria-label="音乐音量" />
+      </div>
+      <p id="build-tag" class="build-tag" data-version></p>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

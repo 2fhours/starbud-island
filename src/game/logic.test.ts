@@ -16,7 +16,7 @@ import {
   setLead,
   topUpBalls,
 } from './logic';
-import { clearSave, readSave, writeSave } from './save';
+import { clearSave, deserialize, readSave, writeSave } from './save';
 import type { Mon, PlayState, SpeciesId } from './types';
 import { createWorld, isWalkable, pathExists, tileCenter } from './world';
 
@@ -161,6 +161,27 @@ describe('存档与地图', () => {
     expect(loaded?.quest.caughtWild).toBe(true);
     expect(loaded?.team[0].speciesId).toBe('lujiao');
     expect(loaded?.balls).toBe(9);
+    const legacy = JSON.stringify({
+      version: 1,
+      play: {
+        name: '旧档',
+        x: 100,
+        y: 200,
+        dir: 'down',
+        team: [{ uid: 'old', speciesId: 'yanwei', level: 7, exp: 3, hp: 12, stages: { atk: 0, def: 0 } }],
+        dex: { yanwei: { seen: true, caught: true } },
+        balls: 4,
+        quest: { introduced: true, caughtWild: false, bossDefeated: false, completed: false },
+        trainers: {},
+        playMs: 5000,
+      },
+    });
+    const restored = deserialize(legacy);
+    expect(restored?.name).toBe('旧档');
+    expect(restored?.team[0].speciesId).toBe('yanwei');
+    expect(restored?.team[0].level).toBe(7);
+    expect(restored?.box).toEqual([]);
+    expect(restored?.balls).toBe(4);
     memory.set('xingya-island-save-v1', '{');
     expect(readSave(storage)).toBeNull();
     clearSave(storage);
