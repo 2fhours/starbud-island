@@ -102,7 +102,7 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
     const items = questObjectives(host.play.quest);
     inner = `<section class="sheet"><h2>芽婆婆的委托</h2>${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
   } else if (mode === 'help') {
-    inner = `<section class="sheet"><h2>操作说明</h2><p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 和 2 使用技能。</p><p>手机：左下角摇杆或方向按钮移动，右下角是交谈和菜单。</p><p>背景音乐可以在画面上的音乐开关和音量条里调整。关闭后会记住，刷新也不会自己打开。</p><p>草克水，水克火，火克草。电擅长对付水和风，岩又硬又慢。靠近会走路的芽灵就会遇见它们。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
+    inner = `<section class="sheet"><h2>操作说明</h2><p>电脑：WASD 或方向键移动，E / 空格 / 回车交谈，Esc 返回，数字键 1 和 2 使用技能。</p><p>手机：左下角摇杆或方向按钮移动，也可以在地图上按住拖动，朝拖动方向走路，松开即停。右下角是交谈和菜单。</p><p>背景音乐可以在画面上的音乐开关和音量条里调整。关闭后会记住，刷新也不会自己打开。</p><p>草克水，水克火，火克草。电擅长对付水和风，岩又硬又慢。靠近会走路的芽灵就会遇见它们。</p><button class="btn secondary" data-act="panel" data-arg="menu">返回</button></section>`;
   } else if (mode === 'confirm-reset') {
     inner = `<section class="sheet"><h2>清除这台设备上的存档？</h2><p>伙伴、图鉴、星芽球和委托进度都会消失。此操作不能撤销。</p><div class="row"><button class="btn" data-act="confirm-reset">确认清除</button><button class="btn secondary" data-act="cancel-reset">再想想</button></div></section>`;
   } else if (mode === 'npc' && host.npcId && host.play) {
@@ -167,7 +167,7 @@ function battleSheet(host: GameHost): string {
     ? `<p>选择还能战斗的伙伴。</p><div class="party">${switches}</div>`
     : host.canAct
       ? `<div class="moves">${moves}</div><div class="row"><button class="btn tiny secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn tiny leaf" data-act="battle-catch">捕捉</button><button class="btn tiny secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
-      : `<button class="btn" data-act="log-next">继续</button>`;
+      : `<p class="auto-note">回合自动继续</p>`;
   return `<section class="sheet battle-sheet"><div class="stage battle-stage" data-type="${esc(foeSpecies.type)}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeSpecies.type)}${hpMarkup(foe.hp, maxHp(foe))}</div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(mySpecies.type)}${hpMarkup(mine.hp, maxHp(mine))}</div></div><div class="actions">${actions}</div></section>`;
 }
 

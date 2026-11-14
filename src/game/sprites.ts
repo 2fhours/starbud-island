@@ -615,7 +615,8 @@ export function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number
 
 export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: number, faint = false): void {
   const fit = canvas.dataset.fit;
-  const css = fit === 'hud' ? { w: 64, h: 64 } : fit === 'card' ? { w: 88, h: 88 } : PORTRAIT_CSS;
+  const short = window.innerHeight < 700;
+  const css = fit === 'hud' ? { w: 64, h: 64 } : fit === 'card' ? { w: 88, h: 88 } : short ? { w: 112, h: 100 } : PORTRAIT_CSS;
   const box = lockBox(canvas, css.w, css.h);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;

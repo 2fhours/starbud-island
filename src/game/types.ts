@@ -90,6 +90,7 @@ export const SAVE_KEY = 'xingya-island-save-v1';
 export const MUTE_KEY = 'xingya-island-mute';
 export const MUSIC_ON_KEY = 'xingya-island-music';
 export const MUSIC_VOL_KEY = 'xingya-island-music-volume';
+export const DRAG_HINT_KEY = 'xingya-island-drag-hint';
 export const MAX_LEVEL = 30;
 export const TEAM_LIMIT = 6;
 export const BALL_TOP_UP = 8;

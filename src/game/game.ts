@@ -39,7 +39,7 @@ import {
   paintRing,
 } from './sprites';
 import type { Dir, Mon, PlayState, SpeciesId } from './types';
-import { MUTE_KEY, START_BALLS } from './types';
+import { DRAG_HINT_KEY, MUTE_KEY, START_BALLS } from './types';
 import { hudHtml, mountTouch, renderOverlay, type CaptureView, type EncounterView, type GameHost } from './ui';
 import { COLS, ROWS, TILE, canWalkPixel, createWorld, tileCenter, type NpcDef, type SignDef, type World } from './world';
 
@@ -92,7 +92,7 @@ export class Game implements GameHost {
   battle: Battle | null = null;
   signView: { title: string; text: string } | null = null;
   npcId: string | null = null;
-  private dialogueState: { speaker: string; text: string; afterLines: string[]; after?: () => void } | null = null;
+  private dialogueState: { speaker: string; text: string; afterLines: string[]; after?: () => void; auto?: boolean } | null = null;
   wilds: Wild[] = [];
   debugFreezeScale: number | null = null;
   rngQueue: number[] | null = null;
@@ -123,6 +123,9 @@ export class Game implements GameHost {
   private logIndex = 0;
   private afterLogs: (() => void) | null = null;
   private timer = 0;
+  private logWait: { ms: number; fn: () => void } | null = null;
+  private logPaused = false;
+  private dragPointer: number | null = null;
   private saveTimer = 0;
   private encounterLockUntil = 0;
   private trainerKey: 'qinghe' | 'lanchuan' | null = null;
@@ -146,8 +149,15 @@ export class Game implements GameHost {
     this.muted = localStorage.getItem(MUTE_KEY) === '1';
     this.audio.sfxMuted = this.muted;
     this.mountMusicDock();
-    document.addEventListener('visibilitychange', () => this.audio.setAudible(document.visibilityState === 'visible'));
-    window.addEventListener('blur', () => this.audio.setAudible(false));
+    this.mountMapDrag();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.onPageHidden();
+      else this.onPageVisible();
+    });
+    window.addEventListener('blur', () => {
+      this.stopMapDrag();
+      this.audio.setAudible(false);
+    });
     window.addEventListener('focus', () => {
       if (document.visibilityState === 'visible') this.audio.setAudible(true);
     });
@@ -243,6 +253,7 @@ export class Game implements GameHost {
         break;
       case 'title':
         this.persist(true);
+        this.abandonTimedWork();
         this.battle = null;
         this.dialogueState = null;
         this.mode = 'title';
@@ -480,6 +491,7 @@ export class Game implements GameHost {
         wild.ignoreUntil = this.time + 99;
         this.markSeen(wild.speciesId);
         this.mode = 'encounter';
+        this.stopMapDrag();
         this.refresh();
         return;
       }
@@ -681,7 +693,7 @@ export class Game implements GameHost {
     this.openDialogue(lines[0].speaker, lines.map((line) => line.text), () => {
       if (this.play) this.play.quest.introduced = true;
       this.persist(true);
-      this.toast('去草坡、湖边或苔木林看看吧');
+      this.toast(this.claimDragHint() ?? '去草坡、湖边或苔木林看看吧');
     });
   }
 
@@ -704,7 +716,7 @@ export class Game implements GameHost {
     this.resetWilds();
     this.mode = 'explore';
     this.encounterLockUntil = this.time + 0.5;
-    this.toast('回到了星芽岛');
+    this.toast(this.claimDragHint() ?? '回到了星芽岛');
     this.refresh();
   }
 
@@ -933,7 +945,7 @@ export class Game implements GameHost {
     else if (battle.result === 'win') line = '野生芽灵退开了。';
     this.battle = null;
     this.trainerKey = null;
-    this.openDialogue('对战', [line], () => this.persist(false));
+    this.openDialogue('对战', [line], () => this.persist(false), true);
   }
 
   private applyTrainerReward(name: string): string {
@@ -1038,23 +1050,32 @@ export class Game implements GameHost {
     return `阅读 · ${nearby.sign.title}`;
   }
 
-  private openDialogue(speaker: string, lines: string[], after?: () => void): void {
+  private openDialogue(speaker: string, lines: string[], after?: () => void, auto = false): void {
     const queue = lines.filter(Boolean);
-    this.dialogueState = { speaker, text: queue[0] ?? '……', afterLines: queue.slice(1), after };
+    this.dialogueState = { speaker, text: queue[0] ?? '……', afterLines: queue.slice(1), after, auto };
     this.mode = 'dialogue';
     this.refresh();
+    if (auto) this.later(this.fast ? 40 : 1100, () => this.advanceAutoDialogue());
+  }
+
+  private advanceAutoDialogue(): void {
+    if (this.mode !== 'dialogue' || !this.dialogueState?.auto) return;
+    this.advanceDialogue();
   }
 
   private advanceDialogue(): void {
     if (!this.dialogueState) return;
     this.audio.play('tap');
+    const auto = this.dialogueState.auto;
     if (this.dialogueState.afterLines.length) {
       this.dialogueState = {
         ...this.dialogueState,
         text: this.dialogueState.afterLines[0],
         afterLines: this.dialogueState.afterLines.slice(1),
+        auto,
       };
       this.refresh();
+      if (auto) this.later(this.fast ? 40 : 1100, () => this.advanceAutoDialogue());
       return;
     }
     const after = this.dialogueState.after;
@@ -1096,6 +1117,8 @@ export class Game implements GameHost {
   private finishLog(): void {
     if (this.logsDone) return;
     this.logsDone = true;
+    this.logWait = null;
+    this.logPaused = false;
     const callback = this.afterLogs;
     this.afterLogs = null;
     callback?.();
@@ -1104,7 +1127,17 @@ export class Game implements GameHost {
 
   private later(ms: number, fn: () => void): void {
     this.clearTimer();
-    this.timer = window.setTimeout(fn, ms);
+    this.logWait = { ms, fn };
+    if (document.visibilityState === 'hidden') {
+      this.logPaused = true;
+      return;
+    }
+    this.logPaused = false;
+    this.timer = window.setTimeout(() => {
+      this.timer = 0;
+      this.logWait = null;
+      fn();
+    }, ms);
   }
 
   private clearTimer(): void {
@@ -1112,6 +1145,32 @@ export class Game implements GameHost {
       window.clearTimeout(this.timer);
       this.timer = 0;
     }
+  }
+
+  private abandonTimedWork(): void {
+    this.clearTimer();
+    this.logWait = null;
+    this.logPaused = false;
+    this.afterLogs = null;
+    this.logsDone = true;
+    this.stopMapDrag();
+  }
+
+  onPageHidden(): void {
+    if (this.timer) {
+      window.clearTimeout(this.timer);
+      this.timer = 0;
+      this.logPaused = this.logWait != null;
+    }
+    this.stopMapDrag();
+    this.audio.setAudible(false);
+  }
+
+  onPageVisible(): void {
+    this.audio.setAudible(true);
+    if (!this.logPaused || !this.logWait) return;
+    const wait = this.logWait;
+    this.later(wait.ms, wait.fn);
   }
 
   private burst(x: number, y: number, colors: string[]): void {
@@ -1211,6 +1270,96 @@ export class Game implements GameHost {
   private rng(): number {
     if (this.rngQueue && this.rngQueue.length) return this.rngQueue.shift() ?? Math.random();
     return Math.random();
+  }
+
+  private claimDragHint(): string | null {
+    try {
+      if (localStorage.getItem(DRAG_HINT_KEY) === '1') return null;
+      const coarse = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+      if (!coarse) return null;
+      localStorage.setItem(DRAG_HINT_KEY, '1');
+      return '在地图上按住拖动就能走路，松开即停';
+    } catch {
+      return null;
+    }
+  }
+
+  private mountMapDrag(): void {
+    const canvas = this.canvas;
+    const dead = 16;
+    const reach = 70;
+    const stop = () => this.stopMapDrag();
+    canvas.addEventListener('pointerdown', (event) => {
+      if (this.dragPointer != null) return;
+      if (event.pointerType === 'mouse') return;
+      if (this.mode !== 'explore' || !this.play) return;
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest('button, input, a, .music-dock, .sheet, #touch, #hud')) return;
+      this.dragPointer = event.pointerId;
+      this.input.dragActive = true;
+      this.input.dragX = 0;
+      this.input.dragY = 0;
+      canvas.dataset.dragX = String(event.clientX);
+      canvas.dataset.dragY = String(event.clientY);
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        /* synthetic pointers in tests have no capture */
+      }
+      this.paintDragCue(event.clientX, event.clientY, 0, 0);
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== this.dragPointer) return;
+      if (this.mode !== 'explore' || !this.play) {
+        stop();
+        return;
+      }
+      const originX = Number(canvas.dataset.dragX);
+      const originY = Number(canvas.dataset.dragY);
+      const dx = event.clientX - originX;
+      const dy = event.clientY - originY;
+      const len = Math.hypot(dx, dy);
+      if (len < dead) {
+        this.input.dragX = 0;
+        this.input.dragY = 0;
+      } else {
+        const scale = Math.min(len, reach) / reach;
+        this.input.dragX = (dx / len) * scale;
+        this.input.dragY = (dy / len) * scale;
+      }
+      this.paintDragCue(originX, originY, dx, dy);
+    });
+    const end = (event: PointerEvent) => {
+      if (event.pointerId !== this.dragPointer) return;
+      stop();
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('lostpointercapture', end);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+
+  stopMapDrag(): void {
+    this.dragPointer = null;
+    this.input.dragActive = false;
+    this.input.dragX = 0;
+    this.input.dragY = 0;
+    const cue = document.getElementById('drag-cue');
+    if (cue) cue.hidden = true;
+  }
+
+  private paintDragCue(x: number, y: number, dx: number, dy: number): void {
+    const cue = document.getElementById('drag-cue');
+    if (!cue) return;
+    cue.hidden = false;
+    const len = Math.hypot(dx, dy);
+    const shown = len < 16 ? 0 : Math.min(len, 70);
+    const nx = len ? dx / len : 0;
+    const ny = len ? dy / len : 0;
+    cue.style.transform = `translate(${x}px, ${y}px)`;
+    const knob = cue.querySelector<HTMLElement>('.drag-knob');
+    if (knob) knob.style.transform = `translate(${nx * shown}px, ${ny * shown}px)`;
   }
 
   private mountMusicDock(): void {

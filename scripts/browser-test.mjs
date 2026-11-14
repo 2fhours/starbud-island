@@ -25,6 +25,32 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function assertSeparated(page, selectors, label) {
+  const result = await page.evaluate((items) => {
+    const boxes = items.flatMap((sel) => [...document.querySelectorAll(sel)].map((el, index) => {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return null;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return null;
+      return { sel: `${sel}#${index}`, left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    })).filter(Boolean);
+    const hit = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+    const overlaps = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        if (hit(boxes[i], boxes[j])) overlaps.push([boxes[i].sel, boxes[j].sel]);
+      }
+    }
+    const off = boxes.filter((b) => b.left < -1 || b.top < -1 || b.right > window.innerWidth + 1 || b.bottom > window.innerHeight + 1).map((b) => b.sel);
+    return { overlaps, off, count: boxes.length };
+  }, selectors);
+  if (result.overlaps.length || result.off.length) {
+    throw new Error(`${label} 控件重叠或出屏 ${JSON.stringify(result)}`);
+  }
+}
+
+const exploreControls = ['#joy', '#btn-touch-talk', '#btn-touch-menu', '#music-dock', '#build-tag', '.hud-left', '.hud-right'];
+
 async function waitForServer() {
   for (let i = 0; i < 40; i += 1) {
     try {
@@ -106,6 +132,63 @@ try {
     return window.__xingya.play.x - before;
   });
   if (moved < 4) throw new Error(`角色没有移动：${moved}`);
+
+  const drag = await page.evaluate(async () => {
+    const canvas = document.querySelector('#view');
+    const game = window.__xingya;
+    const fire = (type, x, y, id = 7) => {
+      canvas.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: 'touch', clientX: x, clientY: y, button: 0 }));
+    };
+    const sample = async (dx, dy) => {
+      const x0 = game.play.x;
+      const y0 = game.play.y;
+      fire('pointerdown', 180, 240);
+      fire('pointermove', 180 + dx, 240 + dy);
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      const movedX = game.play.x - x0;
+      const movedY = game.play.y - y0;
+      fire('pointerup', 180 + dx, 240 + dy);
+      await new Promise((resolve) => setTimeout(resolve, 160));
+      const afterX = game.play.x - x0;
+      const afterY = game.play.y - y0;
+      return { movedX, movedY, driftX: afterX - movedX, driftY: afterY - movedY };
+    };
+    const right = await sample(48, 0);
+    const down = await sample(0, 48);
+    const diagonal = await sample(36, 36);
+    const x1 = game.play.x;
+    const y1 = game.play.y;
+    fire('pointerdown', 180, 240);
+    fire('pointermove', 230, 240);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    fire('pointercancel', 230, 240);
+    const stoppedX = game.play.x;
+    const stoppedY = game.play.y;
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const cancelDrift = Math.hypot(game.play.x - stoppedX, game.play.y - stoppedY);
+    game.onPageHidden();
+    const hidden = game.input.dragActive;
+    game.onPageVisible();
+    game.mode = 'menu';
+    const menuBefore = game.play.x;
+    fire('pointerdown', 200, 260);
+    fire('pointermove', 260, 260);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    fire('pointerup', 260, 260);
+    const menuMoved = game.play.x - menuBefore;
+    game.mode = 'explore';
+    const volBefore = game.play.x;
+    const slider = document.querySelector('#music-volume');
+    slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 3, pointerType: 'touch', clientX: 40, clientY: 40 }));
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return { right, down, diagonal, cancelDrift, hidden, menuMoved, volMoved: game.play.x - volBefore };
+  });
+  if (drag.right.movedX < 4 || Math.abs(drag.right.movedY) > drag.right.movedX) throw new Error(`向右拖动不对 ${JSON.stringify(drag.right)}`);
+  if (drag.down.movedY < 4 || Math.abs(drag.down.movedX) > drag.down.movedY) throw new Error(`向下拖动不对 ${JSON.stringify(drag.down)}`);
+  if (drag.diagonal.movedX < 3 || drag.diagonal.movedY < 3) throw new Error(`斜向拖动不对 ${JSON.stringify(drag.diagonal)}`);
+  if (Math.abs(drag.right.driftX) > 2 || Math.abs(drag.down.driftY) > 2 || drag.cancelDrift > 8) throw new Error(`松手或取消后还在走 ${JSON.stringify(drag)}`);
+  if (drag.hidden || Math.abs(drag.menuMoved) > 1 || Math.abs(drag.volMoved) > 1) throw new Error(`弹层或音量操作带动了角色 ${JSON.stringify(drag)}`);
 
   await page.evaluate(() => {
     const game = window.__xingya;
@@ -220,9 +303,7 @@ try {
   await sleep(80);
   await page.screenshot({ path: `${shotDir}/05-capture.png` });
   await page.click('[data-act="throw"]');
-  await page.waitForSelector('[data-act="shake-skip"], [data-act="dialogue-next"]');
-  const skip = await page.$('[data-act="shake-skip"]');
-  if (skip) await skip.click();
+  await page.waitForSelector('[data-act="dialogue-next"]', { timeout: 4000 });
   for (let i = 0; i < 8; i += 1) {
     const next = await page.$('[data-act="dialogue-next"]');
     if (!next) break;
@@ -258,14 +339,18 @@ try {
   });
   if (!battleVisible) throw new Error('战斗里的技能、捕捉或退开按钮不在画面内');
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
+  const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
+  await page.setViewport({ width: 390, height: 844 });
+  await sleep(150);
+  await assertSeparated(page, battleControls, '竖屏战斗');
+  await page.setViewport({ width: 844, height: 390 });
+  await sleep(150);
+  await assertSeparated(page, battleControls, '横屏战斗');
+  await page.screenshot({ path: `${shotDir}/06b-battle-landscape.png` });
+  await page.setViewport({ width: 1280, height: 800 });
+  if (await page.$('[data-act="log-next"]')) throw new Error('战斗仍显示需要点击的继续按钮');
   await page.click('[data-act="battle-move"]');
-  await page.waitForFunction(() => window.__xingya.mode === 'dialogue', { timeout: 5000 });
-  for (let i = 0; i < 6; i += 1) {
-    const next = await page.$('[data-act="dialogue-next"]');
-    if (!next) break;
-    await next.click();
-    await sleep(30);
-  }
+  await page.waitForFunction(() => window.__xingya.mode === 'explore' && window.__xingya.play.team[0].level >= 5, { timeout: 5000 });
   const afterBattle = await page.evaluate(() => ({
     mode: window.__xingya.mode,
     level: window.__xingya.play.team[0].level,
@@ -326,6 +411,12 @@ try {
     return dock.width > 40 && dock.height > 16 && blocks.every((box) => !hit(dock, box));
   });
   if (!dockClear) throw new Error('窄屏音乐控件挡住了摇杆或交谈');
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(120);
+    await assertSeparated(page, exploreControls, `探索 ${width}x${height}`);
+  }
+  await page.screenshot({ path: `${shotDir}/11-landscape.png` });
 
   await page.setViewport({ width: 1280, height: 800 });
   await page.click('[data-act="menu"]');
