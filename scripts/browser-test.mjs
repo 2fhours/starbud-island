@@ -70,6 +70,43 @@ async function assertInside(page, pairs, label) {
   if (result.length) throw new Error(`${label} 子元素超出容器 ${JSON.stringify(result)}`);
 }
 
+async function assertContentInset(page, parentSel, childSels, minPad, label) {
+  const bad = await page.evaluate((parentSel, childSels, minPad) => {
+    const parent = document.querySelector(parentSel);
+    if (!parent) return [{ missing: parentSel }];
+    const box = parent.getBoundingClientRect();
+    const style = getComputedStyle(parent);
+    const pad = {
+      l: parseFloat(style.paddingLeft) || 0,
+      t: parseFloat(style.paddingTop) || 0,
+      r: parseFloat(style.paddingRight) || 0,
+      b: parseFloat(style.paddingBottom) || 0,
+    };
+    const problems = [];
+    if (pad.l < minPad || pad.t < minPad || pad.r < minPad || pad.b < minPad) problems.push({ pad });
+    const inner = { l: box.left + pad.l, t: box.top + pad.t, r: box.right - pad.r, b: box.bottom - pad.b };
+    for (const sel of childSels) {
+      for (const el of document.querySelectorAll(sel)) {
+        const shown = getComputedStyle(el);
+        if (shown.display === 'none' || shown.visibility === 'hidden') continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) continue;
+        if (rect.left < inner.l - 1 || rect.top < inner.t - 1 || rect.right > inner.r + 1 || rect.bottom > inner.b + 1) {
+          problems.push({
+            sel,
+            child: { l: Math.round(rect.left), t: Math.round(rect.top), r: Math.round(rect.right), b: Math.round(rect.bottom) },
+            inner: { l: Math.round(inner.l), t: Math.round(inner.t), r: Math.round(inner.r), b: Math.round(inner.b) },
+          });
+        }
+      }
+    }
+    return problems;
+  }, parentSel, childSels, minPad);
+  if (bad.length) throw new Error(`${label} 内容贴边或越出内边距 ${JSON.stringify(bad)}`);
+}
+
+const foeInset = ['.battle-top .eyebrow', '.battle-top h2', '.battle-top .type', '.battle-top .hp', '.battle-top small', '.battle-stage canvas'];
+
 async function assertBattleGap(page, label) {
   const gap = await page.evaluate(() => {
     const shadow = (el) => {
@@ -413,30 +450,30 @@ try {
   if (!battleVisible) throw new Error('战斗里的技能、捕捉或退开按钮不在画面内');
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
-  await page.setViewport({ width: 390, height: 844 });
-  await sleep(150);
-  await page.evaluate(() => {
-    const log = document.querySelector('.log');
-    if (log) log.textContent = '野生的焰尾狐甩出很长的尾焰，火星一路溅到叶角鹿身上，这一回合的结果需要完整看完，不能把按钮顶出屏幕。';
-  });
-  await page.evaluate(() => {
-    const el = document.getElementById('toast');
-    el.textContent = '进度已保存在这台设备';
-    el.classList.add('show');
-  });
-  await assertSeparated(page, [...battleControls, '#toast'], '竖屏战斗');
-  await assertBattleGap(page, '竖屏战斗');
-  await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom'], ['.log', '.battle-sheet']], '竖屏战斗图片');
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
     await page.setViewport({ width, height });
-    await sleep(150);
-    await assertSeparated(page, [...battleControls, '#toast'], `战斗 ${width}x${height}`);
+    await sleep(180);
+    await assertContentInset(page, '.battle-stage', foeInset, 12, `敌方卡 ${width}x${height}`);
     await assertBattleGap(page, `战斗 ${width}x${height}`);
-    await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom'], ['.log', '.battle-sheet']], `战斗图片 ${width}x${height}`);
+    const foeOnScreen = await page.evaluate(() => {
+      return ['.battle-top .eyebrow', '.battle-top h2', '.battle-top .hp'].every((sel) => {
+        const box = document.querySelector(sel).getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= window.innerHeight + 1 && box.left >= 0 && box.right <= window.innerWidth + 1;
+      });
+    });
+    if (!foeOnScreen) throw new Error(`敌方信息没有完整出现在画面里 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/battle-${width}x${height}.png` });
+  }
+  await page.evaluate(() => {
+    const log = document.querySelector('.log');
+    if (log) log.textContent = '野生的露珠蛙甩出很长的水花，这一回合的结果需要完整看完。多出来的字应该能在日志里滚动，不能把左边的名字裁掉。后面还有一句用来占满第二行和第三行，确保窄屏和横屏短高都能滚动看到。';
+  });
+  for (const [width, height] of [[320, 568], [844, 390]]) {
+    await page.setViewport({ width, height });
+    await sleep(120);
+    await assertContentInset(page, '.battle-stage', foeInset, 12, `长日志敌方卡 ${width}x${height}`);
     const logFit = await page.evaluate(() => {
       const log = document.querySelector('.log');
-      const pet = document.querySelector('.battle-bottom');
-      if (!log || !pet) return { gap: -1, line: 0 };
       const style = getComputedStyle(log);
       const padTop = parseFloat(style.paddingTop) || 0;
       const padBottom = parseFloat(style.paddingBottom) || 0;
@@ -446,11 +483,20 @@ try {
       const contentTop = box.top + padTop;
       const contentBottom = box.bottom - padBottom;
       const line = Math.max(0, ...[...range.getClientRects()].map((rect) => Math.min(rect.bottom, contentBottom) - Math.max(rect.top, contentTop)));
-      return { gap: pet.getBoundingClientRect().top - box.bottom, line };
+      return { line, overflow: style.overflowY, scroll: log.scrollHeight, client: log.clientHeight };
     });
-    if (logFit.gap < 6 || logFit.line < 12) throw new Error(`战斗日志挤到伙伴信息上 ${width}x${height} ${JSON.stringify(logFit)}`);
-    await page.screenshot({ path: `${shotDir}/battle-${width}x${height}.png` });
+    if (logFit.line < 12 || logFit.overflow !== 'auto' || logFit.scroll <= logFit.client + 4) {
+      throw new Error(`长战斗日志不能完整滚动 ${width}x${height} ${JSON.stringify(logFit)}`);
+    }
+    await assertBattleGap(page, `长日志 ${width}x${height}`);
   }
+  await page.setViewport({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    const el = document.getElementById('toast');
+    el.textContent = '进度已保存在这台设备';
+    el.classList.add('show');
+  });
+  await assertSeparated(page, [...battleControls, '#toast'], '竖屏战斗');
   await page.screenshot({ path: `${shotDir}/06b-battle-landscape.png` });
   await page.addStyleTag({ content: 'body.font-boost, body.font-boost button, body.font-boost .hud-copy strong { font-size: 20px; }' });
   await page.evaluate(() => document.body.classList.add('font-boost'));
@@ -458,7 +504,7 @@ try {
     await page.setViewport({ width, height });
     await sleep(120);
     await assertBattleGap(page, `大字战斗 ${width}x${height}`);
-    await assertInside(page, [['.stage canvas', '.stage'], ['.battle-bottom canvas', '.battle-bottom']], `大字战斗图片 ${width}x${height}`);
+    await assertContentInset(page, '.battle-stage', foeInset, 12, `大字敌方卡 ${width}x${height}`);
     const boost = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('[data-act="battle-move"], [data-act="battle-catch"], [data-act="battle-run"], [data-act="toggle-switch"]')];
       const sheet = document.querySelector('.battle-sheet');

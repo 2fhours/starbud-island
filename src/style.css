@@ -222,10 +222,11 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   align-items: flex-start;
   gap: 12px;
 }
-.stage, .dex-card, .mon-card, .choice, .battle-top, .battle-bottom, .hud-portrait {
+.stage, .dex-card, .mon-card, .choice, .battle-bottom, .hud-portrait {
   overflow: hidden;
   min-width: 0;
 }
+.battle-top { min-width: 0; overflow: visible; }
 .battle-top, .battle-bottom {
   display: grid;
   gap: 10px;
@@ -320,23 +321,23 @@ body:not([data-mode="explore"]) .build-tag {
 .battle-top > div, .battle-bottom > div { min-width: 0; overflow-wrap: anywhere; }
 .battle-stage {
   display: flex;
-  align-items: stretch;
-  height: clamp(104px, 22dvh, 168px);
+  align-items: center;
+  height: auto;
   min-height: 0;
   margin: 0 0 8px;
+  padding: 18px;
+  border-radius: 16px;
   overflow: hidden;
 }
 .battle-stage .battle-top {
   flex: 1 1 auto;
   width: 100%;
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
-  overflow: hidden;
+  height: auto;
+  min-width: 0;
+  overflow: visible;
   align-items: center;
-  grid-template-rows: minmax(0, 1fr);
 }
-.battle-stage canvas.portrait-stage { max-height: 100%; align-self: center; }
+.battle-stage canvas.portrait-stage { max-height: 116px; align-self: center; }
 .log {
   min-height: calc(1.4em + 16px);
   max-height: calc(4.2em + 16px);
@@ -497,7 +498,7 @@ body:not([data-mode="explore"]) .build-tag {
 @media (max-height: 520px) {
   .stage { min-height: 88px; margin: 4px 0; }
   .sheet { padding: 12px; }
-  .log { max-height: calc(1.4em + 16px); }
+  .log { max-height: calc(1.45em * 2 + 16px); overflow: auto; }
   body:not([data-mode="explore"]) #toast {
     top: calc(8px + env(safe-area-inset-top));
     bottom: auto;
@@ -516,7 +517,7 @@ body:not([data-mode="explore"]) .build-tag {
     max-height: calc(100dvh - 60px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
   .battle-sheet { display: flex; flex-direction: column; gap: 6px; }
-  .battle-sheet .stage { height: 80px; min-height: 0; margin: 0; flex: 0 0 auto; }
+  .battle-sheet .stage { height: auto; min-height: 0; margin: 0; flex: 0 0 auto; padding: 14px 16px; border-radius: 12px; }
   .battle-sheet .battle-top h2 { font-size: 15px; line-height: 1.15; margin: 0; }
   .battle-sheet .battle-top .eyebrow,
   .battle-sheet .battle-top small { font-size: 11px; line-height: 1.15; }
@@ -524,10 +525,11 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .battle-bottom { align-items: center; }
   .battle-sheet .battle-bottom canvas.portrait-card { width: min(56px, 100%); }
   .battle-sheet .log {
-    margin: 0 0 8px;
-    min-height: calc(1.4em + 16px);
-    max-height: calc(1.4em + 16px);
+    margin: 0 0 4px;
+    min-height: calc(1.45em + 16px);
+    max-height: calc(1.45em * 2 + 16px);
     flex: 0 0 auto;
+    overflow: auto;
   }
   .battle-sheet .battle-bottom,
   .battle-sheet .actions { flex: 0 0 auto; }

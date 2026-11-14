@@ -625,14 +625,14 @@ export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: nu
   const fit = canvas.dataset.fit;
   const css = fit === 'hud' ? { w: 48, h: 48 } : fit === 'card' ? { w: 72, h: 72 } : { w: 132, h: 116 };
   const stage = canvas.closest('.stage');
-  const parent = (stage ?? canvas.parentElement)?.getBoundingClientRect();
-  if (parent && parent.width > 8 && parent.height > 8) {
-    const maxW = fit === 'stage' ? Math.min(parent.width * 0.46, parent.width) : parent.width;
-    css.w = Math.max(24, Math.min(css.w, maxW));
-    css.h = Math.max(24, Math.min(css.h, Math.max(24, parent.height - 4)));
-    const aspect = fit === 'stage' ? 132 / 116 : 1;
-    if (css.w / css.h > aspect) css.w = css.h * aspect;
-    else css.h = css.w / aspect;
+  if (stage && !stage.classList.contains('battle-stage')) {
+    const bounds = stage.getBoundingClientRect();
+    const style = getComputedStyle(stage);
+    const innerH = bounds.height - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+    if (innerH > 24 && innerH < css.h) {
+      css.h = Math.max(24, innerH - 4);
+      css.w = css.h * (132 / 116);
+    }
   }
   const box = lockBox(canvas, css.w, css.h);
   const ctx = canvas.getContext('2d');
