@@ -105,6 +105,87 @@ async function assertContentInset(page, parentSel, childSels, minPad, label) {
   if (bad.length) throw new Error(`${label} 内容贴边或越出内边距 ${JSON.stringify(bad)}`);
 }
 
+async function assertDialogActions(page, acts, label) {
+  const problems = await page.evaluate((acts) => {
+    const sheet = document.querySelector('.sheet');
+    const body = document.querySelector('.sheet-body');
+    const foot = document.querySelector('.sheet-foot');
+    const found = [];
+    if (!sheet || !body || !foot) return ['缺少弹框外框或底栏'];
+    const sheetBox = sheet.getBoundingClientRect();
+    const bodyBox = body.getBoundingClientRect();
+    const footBox = foot.getBoundingClientRect();
+    const hit = (a, b) => {
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      return w > 2 && h > 2;
+    };
+    const shadowY = (el) => {
+      const match = getComputedStyle(el).boxShadow.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+      return match ? Math.max(0, Number(match[2])) : 0;
+    };
+    if (footBox.top < bodyBox.bottom - 1) found.push('底栏压住正文');
+    const bodyOverflow = getComputedStyle(body).overflowY;
+    if (bodyOverflow !== 'auto' && bodyOverflow !== 'scroll') found.push('正文不能滚动');
+    const buttons = acts.map((act) => document.querySelector(`[data-act="${act}"]`));
+    if (buttons.some((el) => !el)) return ['缺少按钮'];
+    const boxes = buttons.map((el) => ({ el, r: el.getBoundingClientRect(), shadow: shadowY(el) }));
+    for (const item of boxes) {
+      const { r, shadow, el } = item;
+      if (r.width < 36 || r.height < 36) found.push(`按钮太小 ${el.getAttribute('data-act')}`);
+      if (r.left < sheetBox.left - 1 || r.right > sheetBox.right + 1 || r.top < sheetBox.top - 1 || r.bottom + shadow > sheetBox.bottom + 1) {
+        found.push(`按钮或阴影超出弹框 ${el.getAttribute('data-act')}`);
+      }
+      if (r.top < footBox.top - 1 || r.bottom > footBox.bottom + 1 || r.left < footBox.left - 1 || r.right > footBox.right + 1) {
+        found.push(`按钮不在底栏 ${el.getAttribute('data-act')}`);
+      }
+      const hitEl = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!hitEl || (hitEl !== el && !el.contains(hitEl))) found.push(`点击落点不是按钮 ${el.getAttribute('data-act')}`);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        if (rect.left < r.left - 1 || rect.right > r.right + 1 || rect.top < r.top - 1 || rect.bottom > r.bottom + 1) {
+          found.push(`按钮文字被裁 ${el.getAttribute('data-act')}`);
+        }
+      }
+    }
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        if (hit(boxes[i].r, boxes[j].r)) found.push('按钮互相重叠');
+      }
+    }
+    const clip = (rect, pane) => ({
+      left: Math.max(rect.left, pane.left),
+      top: Math.max(rect.top, pane.top),
+      right: Math.min(rect.right, pane.right),
+      bottom: Math.min(rect.bottom, pane.bottom),
+    });
+    for (const el of body.querySelectorAll('p, h2, .hp, canvas, .stage')) {
+      for (const rect of el.getClientRects()) {
+        const vis = clip(rect, bodyBox);
+        if (vis.right - vis.left < 2 || vis.bottom - vis.top < 2) continue;
+        if (hit(vis, footBox)) found.push('正文盖住底栏');
+        for (const item of boxes) if (hit(vis, item.r)) found.push('正文盖住按钮');
+      }
+    }
+    if (body.scrollHeight > body.clientHeight + 2) {
+      const prev = body.scrollTop;
+      body.scrollTop = body.scrollHeight;
+      const last = [...body.querySelectorAll('p, .hp')].at(-1);
+      if (last) {
+        const r = last.getBoundingClientRect();
+        const freshBody = body.getBoundingClientRect();
+        if (r.bottom > freshBody.bottom + 2) found.push('滚到底后正文仍被裁');
+        if (hit(r, foot.getBoundingClientRect())) found.push('滚到底后正文碰到按钮');
+      }
+      body.scrollTop = prev;
+    }
+    return found;
+  }, acts);
+  if (problems.length) throw new Error(`${label} ${JSON.stringify(problems)}`);
+}
+
 const foeInset = ['.battle-top .eyebrow', '.battle-top h2', '.battle-top .type', '.battle-top .hp', '.battle-top small', '.battle-stage canvas'];
 
 async function assertBattleGap(page, label) {
@@ -378,7 +459,17 @@ try {
     if (encounterFit.overlaps.length || encounterFit.off) {
       throw new Error(`遭遇按钮挤在一起或出屏 ${width}x${height} ${JSON.stringify(encounterFit)}`);
     }
+    await assertDialogActions(page, ['encounter-catch', 'encounter-fight', 'encounter-leave'], `遭遇 ${width}x${height}`);
   }
+  await page.addStyleTag({ content: 'body.font-boost, body.font-boost button, body.font-boost .hud-copy strong { font-size: 20px; }' });
+  await page.evaluate(() => document.body.classList.add('font-boost'));
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await sleep(120);
+    await assertDialogActions(page, ['encounter-catch', 'encounter-fight', 'encounter-leave'], `大字遭遇 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/encounter-font-${width}x${height}.png` });
+  }
+  await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
   await page.click('[data-act="encounter-leave"]');
   await sleep(800);
@@ -409,9 +500,42 @@ try {
       });
     });
     if (captureFit.some((ok) => !ok)) throw new Error(`捕捉按钮不在画面内 ${width}x${height}`);
+    await assertDialogActions(page, ['throw', 'capture-back'], `捕捉 ${width}x${height}`);
     await page.screenshot({ path: `${shotDir}/capture-${width}x${height}.png` });
   }
+  await page.evaluate(() => document.body.classList.add('font-boost'));
+  for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await sleep(120);
+    await assertDialogActions(page, ['throw', 'capture-back'], `大字捕捉 ${width}x${height}`);
+    const ringClear = await page.evaluate(() => {
+      const ring = document.querySelector('#catch-ring').getBoundingClientRect();
+      const body = document.querySelector('.sheet-body').getBoundingClientRect();
+      const buttons = [...document.querySelectorAll('[data-act="throw"], [data-act="capture-back"]')].map((el) => el.getBoundingClientRect());
+      const hit = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+      return ring.bottom <= body.bottom + 1 && ring.top >= body.top - 1 && buttons.every((box) => !hit(ring, box));
+    });
+    if (!ringClear) throw new Error(`大字捕捉圈盖住按钮或跑出正文 ${width}x${height}`);
+    await page.screenshot({ path: `${shotDir}/capture-font-${width}x${height}.png` });
+  }
+  await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.setViewport({ width: 1280, height: 800 });
+  const ballsAtPrompt = await page.evaluate(() => window.__xingya.play.balls);
+  await page.click('[data-act="capture-back"]');
+  await page.waitForSelector('[data-act="encounter-catch"]', { timeout: 4000 });
+  const afterCancel = await page.evaluate((before) => ({
+    mode: window.__xingya.mode,
+    balls: window.__xingya.play.balls,
+    team: window.__xingya.play.team.length,
+    before,
+  }), ballsAtPrompt);
+  if (afterCancel.mode !== 'encounter' || afterCancel.balls !== ballsAtPrompt || afterCancel.team !== 1) {
+    throw new Error(`先不扔不应自动捕捉 ${JSON.stringify(afterCancel)}`);
+  }
+  await page.click('[data-act="encounter-catch"]');
+  await page.waitForSelector('#catch-ring', { timeout: 4000 });
+  const stillManual = await page.evaluate(() => window.__xingya.mode);
+  if (stillManual !== 'capture') throw new Error(`打开捕捉后被自动投掷，当前是 ${stillManual}`);
   await page.click('[data-act="throw"]');
   await page.waitForSelector('[data-act="dialogue-next"]', { timeout: 4000 });
   for (let i = 0; i < 8; i += 1) {
