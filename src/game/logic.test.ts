@@ -71,8 +71,9 @@ describe('战斗数值', () => {
     const logs = performMove(healer, makeMon('dianrong', 3), getMove('guanghe'), fixed);
     expect(logs.join('')).toContain('光合');
     expect(healer.hp).toBeGreaterThan(before);
-    const player = [makeMon('lujiao', 8)];
-    const battle = prepareBattle(player, [makeMon('luzhu', 3)], 'wild', '');
+    const even = { con: 8, str: 8, int: 8, spi: 8, spd: 8 };
+    const player = [makeMon('lujiao', 8, 1, true, even)];
+    const battle = prepareBattle(player, [makeMon('luzhu', 3, 1, false, even)], 'wild', '');
     let guard = 0;
     while (battle.phase === 'input' && guard < 40) {
       playerMove(battle, 0, fixed);
