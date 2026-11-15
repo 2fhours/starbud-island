@@ -2,11 +2,19 @@ import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
 import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
-import { SKILL_LIST, getMove, skillStats } from './skills';
+import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
-import type { MoveCat, PlayState, SpeciesId, TypeId } from './types';
+import type { MoveCat, MoveDef, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
+
+function formMark(move: MoveDef): string {
+  return `<span class="move-form">${skillFormLabel(move)}</span>`;
+}
+
+function moveFacts(move: MoveDef): string {
+  return `${TIER_LABEL[move.tier]} · ${skillFormLabel(move)} · ${CAT_LABEL[move.cat]}`;
+}
 
 export interface EncounterView {
   speciesId: SpeciesId;
@@ -184,7 +192,10 @@ function teamSheet(play: PlayState): string {
   const cards = play.team.map((mon, index) => {
     const species = getSpecies(mon.speciesId);
     const max = maxHp(mon);
-    const names = (mon.moves ?? []).map((id) => esc(getMove(id).name)).join(' · ');
+    const names = (mon.moves ?? []).map((id) => {
+      const move = getMove(id);
+      return `${esc(move.name)} ${skillFormLabel(move)}`;
+    }).join(' · ');
     return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
@@ -212,12 +223,14 @@ function battleSheet(host: GameHost): string {
   const mine = battle.player[battle.pIndex];
   const foeSpecies = getSpecies(foe.speciesId);
   const mySpecies = getSpecies(mine.speciesId);
+  const myAspect = aspectOf(mine);
+  const basic = basicStrike(myAspect);
   const mineState = battle.runtime[mine.uid];
   const moves = (mine.moves ?? []).map((id, index) => {
     const move = getMove(id);
     const cooling = (mineState?.cd[id] ?? 0) > 0;
     const broke = (mine.mp ?? 0) < move.cost;
-    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling && !broke ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${move.cost > 0 ? ` ·${move.cost}` : ''}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
+    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling && !broke ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${formMark(move)}${move.cost > 0 ? ` ·${move.cost}` : ''}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
   }).join('');
   const switches = battle.player.map((mon, index) => {
     const name = getSpecies(mon.speciesId).name;
@@ -227,10 +240,9 @@ function battleSheet(host: GameHost): string {
   const actions = host.mustSwitch
     ? `<p>选择还能战斗的伙伴。</p><div class="party">${switches}</div>`
     : host.canAct
-      ? `<div class="moves"><button class="btn secondary" data-act="battle-basic" ${host.canAct ? '' : 'disabled'}>普通攻击</button>${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
+      ? `<div class="moves"><button class="btn secondary" data-act="battle-basic" ${host.canAct ? '' : 'disabled'}>${esc(basic.name)}${formMark(basic)}</button>${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<p class="auto-note">回合自动继续</p>`;
   const foeAspect = aspectOf(foe);
-  const myAspect = aspectOf(mine);
   const foeState = battle.runtime[foe.uid];
   const tags = [
     foeState?.shield ? `护盾${foeState.shield}` : '',
@@ -290,7 +302,7 @@ export function skillResultsHtml(host: GameHost): string {
     if (query && !move.name.includes(query) && !move.desc.includes(query)) return false;
     return true;
   });
-  const cards = list.slice(0, 80).map((move) => `<article class="skill-card"><strong>${esc(move.name)}</strong><div>${typePill(move.type)} <span>${TIER_LABEL[move.tier]} · ${CAT_LABEL[move.cat]}</span></div><p>${esc(move.desc)}</p></article>`).join('');
+  const cards = list.slice(0, 80).map((move) => `<article class="skill-card"><strong>${esc(move.name)}</strong><div>${typePill(move.type)} <span>${moveFacts(move)}</span></div><p>${esc(move.desc)}</p></article>`).join('');
   return `<p class="fine">共 ${stats.total} 个技能，当前显示 ${list.length} 个。每属性 ${stats.perType.yangmu ?? 0} 个。</p>${cards || '<p>没有符合的技能。</p>'}`;
 }
 
@@ -309,7 +321,7 @@ function loadoutSheet(host: GameHost): string {
   if (!mon) return shell('<h2>技能</h2>', '<p>队伍是空的。</p>', `<button class="btn secondary" data-act="panel" data-arg="team">返回</button>`);
   const equipped = new Set(mon.moves ?? []);
   const known = learnableMoves(mon);
-  const cards = known.map((move) => `<button class="skill-card ${equipped.has(move.id) ? 'on' : ''}" data-act="equip-move" data-arg="${move.id}"><strong>${esc(move.name)}</strong><span>${TIER_LABEL[move.tier]} · ${CAT_LABEL[move.cat]} · ${TIER_LEVEL[move.tier]}级</span><small>${esc(move.desc)}</small></button>`).join('');
+  const cards = known.map((move) => `<button class="skill-card ${equipped.has(move.id) ? 'on' : ''}" data-act="equip-move" data-arg="${move.id}"><strong>${esc(move.name)}</strong><span>${moveFacts(move)} · ${TIER_LEVEL[move.tier]}级</span><small>${esc(move.desc)}</small></button>`).join('');
   return shell(`<h2>${esc(getSpecies(mon.speciesId).name)}的技能</h2>`, `<div class="talk-row">${portrait(mon.speciesId, mon.hp <= 0, 'card')}<div class="talk-copy"><p>${typePill(aspectOf(mon))} 已装备 ${equipped.size}/${LOADOUT_LIMIT}。点一下装备或卸下。神级要 24 级。</p></div></div><div class="skill-list">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="team">返回队伍</button>`);
 }
 

@@ -177,8 +177,10 @@ describe('物种分布和界面', () => {
 
   it('队伍界面说明五维，不写出种族值或个体值', () => {
     const ui = readFileSync(new URL('./ui.ts', import.meta.url), 'utf8');
+    const skills = readFileSync(new URL('./skills.ts', import.meta.url), 'utf8');
     expect(ui).toContain('体质');
-    expect(ui).toContain('普通攻击');
+    expect(ui).toContain('basic.name');
+    expect(skills).toContain('普通攻击');
     expect(ui).not.toContain('种族值');
     expect(ui).not.toContain('个体值');
   });
