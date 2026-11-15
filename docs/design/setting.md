@@ -114,31 +114,34 @@
 
 ## 立绘
 
-静态生成的站立插画，文件在 `public/portraits/`。页面用 `import.meta.env.BASE_URL` 接上 `portraits/<id>.jpg`，因此会带上站点前缀 `/starbud-island/`。这些图不是属性、不是个体值，也不进入伤害、治疗、经验或捕捉的计算。游戏里只显示图画，不显示文件名、生成过程或公式。
+静态生成的插画，文件在 `public/portraits/`。页面用 `import.meta.env.BASE_URL` 接上 `portraits/` 和文件名，因此会带上站点前缀 `/starbud-island/`。这些图不是属性、不是个体值，也不进入伤害、治疗、经验或捕捉的计算。游戏里只显示图画，不显示文件名、朝向词、生成过程或公式。
 
-| 文件 | 对象 |
-| --- | --- |
-| lujiao.jpg | 叶角鹿 |
-| yanwei.jpg | 焰尾狐 |
-| luzhu.jpg | 露珠蛙 |
-| dianrong.jpg | 电绒鼠 |
-| yanke.jpg | 岩壳龟 |
-| fengling.jpg | 风铃鸟 |
-| taibei.jpg | 苔背熊 |
-| xiwen.jpg | 汐纹獭 |
-| wudeng.jpg | 雾灯蛾 |
-| yunyang.jpg | 云岩羊 |
-| luoxing.jpg | 落星鼯 |
-| hanquan.jpg | 寒泉鲵 |
-| player.jpg | 玩家。小芽、星旅、阿露都用这一张 |
-| grandma.jpg | 芽婆婆，npc id `grandma` |
-| qinghe.jpg | 青禾，npc id `qinghe` |
-| lanchuan.jpg | 岚川，npc id `lanchuan` |
+十二种芽灵各有正面和背面，像素是 576×864，宽比高是 2:3。显示框按这个比例锁定，图片用 `object-fit: contain`，不拉变形，也不按原始像素把弹框撑大。
+
+| 物种 | 正面 | 背面 |
+| --- | --- | --- |
+| 叶角鹿 | lujiao-front.jpg | lujiao-back.jpg |
+| 焰尾狐 | yanwei-front.jpg | yanwei-back.jpg |
+| 露珠蛙 | luzhu-front.jpg | luzhu-back.jpg |
+| 电绒鼠 | dianrong-front.jpg | dianrong-back.jpg |
+| 岩壳龟 | yanke-front.jpg | yanke-back.jpg |
+| 风铃鸟 | fengling-front.jpg | fengling-back.jpg |
+| 苔背熊 | taibei-front.jpg | taibei-back.jpg |
+| 汐纹獭 | xiwen-front.jpg | xiwen-back.jpg |
+| 雾灯蛾 | wudeng-front.jpg | wudeng-back.jpg |
+| 云岩羊 | yunyang-front.jpg | yunyang-back.jpg |
+| 落星鼯 | luoxing-front.jpg | luoxing-back.jpg |
+| 寒泉鲵 | hanquan-front.jpg | hanquan-back.jpg |
+
+朝向：
+
+- 战斗里，我方当前芽灵用背面，对方用正面。野生战、训练师战、更换伙伴和体力耗尽都按这一条。换人之后，新的我方仍是背面，新的对方仍是正面。背面是单独画的，不是把正面镜像过来。
+- 队伍详情、初始三选一、图鉴、遭遇和技能页默认用正面。
+- 人物仍是一张正面：`player.jpg` 给三种称呼共用，`grandma.jpg`、`qinghe.jpg`、`lanchuan.jpg` 给芽婆婆、青禾、岚川。雾守和石岭没有静态立绘。
 
 出现的位置：
 
-- 队伍详情里每只芽灵的主图，用该物种的立绘。名字、属性、可见五维和技能仍按原来的位置显示。
-- 初始三选一、图鉴、遭遇舞台、战斗双方信息，也用物种立绘。显示框尺寸固定，图片 `object-fit: contain`，不按原始像素把弹框撑大，也不裁掉整张立绘。
+- 队伍详情里每只芽灵的主图是该物种正面。名字、属性、可见五维和技能仍按原来的位置显示。
 - 对话，以及芽婆婆、青禾、岚川的交谈面板，用对应人物立绘。取名和菜单里的旅人形象用 `player.jpg`。
 - 没有对应人物的文字（告示、捕捉结果、对战结果）不放立绘。
 

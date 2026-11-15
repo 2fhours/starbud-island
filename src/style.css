@@ -116,8 +116,8 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   aspect-ratio: auto;
 }
 .portrait-frame.is-faint > img.standing { filter: grayscale(0.85) brightness(0.92); }
-.portrait-detail { width: 96px; height: 128px; }
-.portrait-card { width: 72px; height: 96px; }
+.portrait-detail { width: 88px; height: 132px; }
+.portrait-card { width: 64px; height: 96px; }
 .portrait-actor { width: 84px; height: 112px; }
 .portrait-frame.compact { width: 66px; height: 88px; }
 .talk-row, .identity {
@@ -135,18 +135,19 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   left: 50%;
   bottom: 8px;
   transform: translateX(-50%);
-  width: 96px;
-  height: min(128px, calc(100% - 16px));
-  max-width: calc(100% - 16px);
+  width: 64px;
+  height: 96px;
+  max-height: calc(100% - 12px);
+  max-width: calc(100% - 12px);
 }
 .battle-stage .portrait-frame.portrait-stage {
-  width: 72px;
+  width: 64px;
   height: 96px;
   max-width: 100%;
   max-height: 96px;
   justify-self: center;
 }
-.battle-bottom .portrait-frame.portrait-card { width: 64px; height: 84px; }
+.battle-bottom .portrait-frame.portrait-card { width: 48px; height: 72px; }
 .hud-copy strong { display: block; font-size: 1rem; }
 .map-chip { color: var(--leaf); font-size: 0.82rem; letter-spacing: 0.08em; }
 .hud-copy small, .fine { color: var(--soft); }
@@ -490,7 +491,7 @@ body:not([data-mode="explore"]) .build-tag {
 }
 .title-dim { align-items: flex-end; background: linear-gradient(180deg, rgba(48,28,18,0.02), rgba(48,28,18,0.28)); }
 .mon-list { display: flex; flex-direction: column; gap: 8px; }
-.mon-card { display: grid; grid-template-columns: 96px minmax(0, 1fr); text-align: left; gap: 8px; align-items: start; }
+.mon-card { display: grid; grid-template-columns: 88px minmax(0, 1fr); text-align: left; gap: 8px; align-items: start; }
 .mon-copy { min-width: 0; }
 .pet-stats { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .core-row, .derived-row { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 2px 0; }
@@ -593,7 +594,7 @@ body:not([data-mode="explore"]) .build-tag {
   .encounter-sheet .stage { height: 84px; min-height: 0; margin: 4px 0; }
   .encounter-sheet p { margin: 2px 0; }
   .encounter-sheet .stack { gap: 8px; }
-  .encounter-sheet .stage .portrait-frame.portrait-stage { width: 54px; }
+  .encounter-sheet .stage .portrait-frame.portrait-stage { width: 40px; height: 60px; }
 }
 @media (max-width: 480px), (max-height: 520px) {
   .battle-sheet .sheet-head { display: none; }
@@ -608,14 +609,14 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .battle-top .type { padding: 0 6px; }
   .battle-sheet .status-row { margin: 0; }
   .battle-sheet .status-row:empty { display: none; }
-  .battle-stage .portrait-frame.portrait-stage { width: 48px; height: 64px; max-height: 64px; }
+  .battle-stage .portrait-frame.portrait-stage { width: 42px; height: 64px; max-height: 64px; }
   .battle-sheet .log { flex: 0 0 auto; height: 32px; min-height: 32px; max-height: 36px; margin: 0; overflow: auto; }
-  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 40px minmax(0, 1fr); align-items: center; }
-  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 36px; height: 48px; }
+  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 36px minmax(0, 1fr); align-items: center; }
+  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 32px; height: 48px; }
 }
 @media (max-width: 380px) {
   .mon-card { grid-template-columns: 80px minmax(0, 1fr); }
-  .mon-card .portrait-detail { width: 80px; height: 106px; }
+  .mon-card .portrait-detail { width: 80px; height: 120px; }
   .talk-row .portrait-actor, .identity .portrait-actor { width: 72px; height: 96px; }
   .portrait-frame.compact { width: 60px; height: 80px; }
 }
@@ -645,19 +646,19 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .sheet-body { display: flex; flex-direction: column; gap: 6px; }
   .battle-sheet .stage { height: auto; min-height: 0; margin: 0; flex: 0 0 auto; padding: 12px 14px; border-radius: 12px; overflow: visible; }
   .battle-stage canvas.portrait-stage,
-  .battle-stage .portrait-frame.portrait-stage { max-height: 64px; height: 64px; width: 48px; }
+  .battle-stage .portrait-frame.portrait-stage { max-height: 64px; height: 64px; width: 42px; }
   .battle-sheet .battle-top h2 { font-size: 15px; line-height: 1.15; margin: 0; }
   .battle-sheet .battle-top .eyebrow,
   .battle-sheet .battle-top small { font-size: 11px; line-height: 1.15; }
   .battle-sheet .battle-top .hp { height: 8px; margin: 2px 0; }
   .battle-sheet .battle-bottom { align-items: center; }
   .battle-sheet .battle-bottom canvas.portrait-card { width: min(56px, 100%); }
-  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 36px; height: 48px; }
-  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 44px minmax(0, 1fr); }
+  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 32px; height: 48px; }
+  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 36px minmax(0, 1fr); }
   .battle-sheet .log { flex: 0 0 auto; height: auto; min-height: 28px; max-height: 40px; }
   .talk-row .portrait-actor { width: 72px; height: 96px; }
   .mon-card { grid-template-columns: 80px minmax(0, 1fr); }
-  .mon-card .portrait-detail { width: 80px; height: 106px; }
+  .mon-card .portrait-detail { width: 80px; height: 120px; }
   .battle-sheet .log {
     margin: 0;
     height: 32px;

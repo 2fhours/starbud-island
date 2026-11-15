@@ -4,7 +4,7 @@ import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STA
 import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, getMove, skillStats } from './skills';
 import type { Input } from './input';
-import { actorFor, actorPortraitHtml, bindStandingPortraits, speciesPortraitHtml } from './portraits';
+import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
 import type { MoveCat, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
@@ -70,11 +70,11 @@ function typePill(type: string): string {
   return `<span class="type" style="background:${meta.color}">${meta.label}</span>`;
 }
 
-function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'detail' | 'hud' = 'card'): string {
+function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'detail' | 'hud' = 'card', facing: PortraitFacing = 'front'): string {
   if (fit === 'hud') {
     return `<canvas class="portrait portrait-hud" data-fit="hud" data-species="${id}" data-faint="${faint ? '1' : '0'}" width="64" height="64" aria-hidden="true"></canvas>`;
   }
-  return speciesPortraitHtml(id, fit, faint);
+  return speciesPortraitHtml(id, fit, faint, facing);
 }
 
 function talkRow(actor: string | null, body: string, compact = false): string {
@@ -237,7 +237,7 @@ function battleSheet(host: GameHost): string {
     foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
     foeState?.rootTurns ? '定身' : '',
   ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'))}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0, 'card', battleFacing('player'))}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 
