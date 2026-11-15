@@ -161,7 +161,7 @@ async function assertDialogActions(page, acts, label) {
       right: Math.min(rect.right, pane.right),
       bottom: Math.min(rect.bottom, pane.bottom),
     });
-    for (const el of body.querySelectorAll('p, h2, .hp, canvas, .stage')) {
+    for (const el of body.querySelectorAll('p, h2, .hp, canvas, .stage, .portrait-frame')) {
       for (const rect of el.getClientRects()) {
         const vis = clip(rect, bodyBox);
         if (vis.right - vis.left < 2 || vis.bottom - vis.top < 2) continue;
@@ -186,7 +186,7 @@ async function assertDialogActions(page, acts, label) {
   if (problems.length) throw new Error(`${label} ${JSON.stringify(problems)}`);
 }
 
-const foeInset = ['.battle-top .eyebrow', '.battle-top h2', '.battle-top .type', '.battle-top .hp', '.battle-top small', '.battle-stage canvas'];
+const foeInset = ['.battle-top .eyebrow', '.battle-top h2', '.battle-top .type', '.battle-top .hp', '.battle-top small', '.battle-stage .portrait-frame'];
 
 async function assertBattleGap(page, label) {
   const gap = await page.evaluate(() => {
@@ -250,15 +250,27 @@ try {
   }
   await page.click('[data-act="new-game"]');
   await sleep(350);
+  const nameArt = await page.$eval('.talk-row img.standing', (img) => img.getAttribute('src'));
+  if (!nameArt?.includes('/portraits/player.jpg')) throw new Error(`取名界面没有旅人立绘 ${nameArt}`);
   const afterGesture = await page.evaluate(() => window.__xingya.audioState);
   if (!afterGesture.unlocked || afterGesture.contexts !== 1 || afterGesture.track !== 'explore' || !afterGesture.scheduling) {
     throw new Error(`点击开始后音乐没有解锁 ${JSON.stringify(afterGesture)}`);
   }
   await page.click('[data-arg="星旅"]');
   await page.click('[data-act="to-starter"]');
+  const starterArt = await page.$$eval('.choice img.standing', (imgs) => imgs.map((img) => img.getAttribute('src')));
+  if (starterArt.length !== 3 || !starterArt.some((src) => src?.includes('/portraits/lujiao.jpg'))) {
+    throw new Error(`初始选择没有物种立绘 ${JSON.stringify(starterArt)}`);
+  }
   await page.click('[data-arg="lujiao"]');
   await page.screenshot({ path: `${shotDir}/02-starter.png` });
   await page.click('[data-act="confirm-starter"]');
+  await page.waitForSelector('.talk-row img.standing');
+  const introArt = await page.$eval('.talk-row img.standing', (img) => img.getAttribute('src'));
+  const introSpeaker = await page.$eval('.eyebrow', (el) => el.textContent);
+  if (introSpeaker !== '芽婆婆' || !introArt?.includes('/portraits/grandma.jpg')) {
+    throw new Error(`开场对话立绘不对 ${introSpeaker} ${introArt}`);
+  }
   for (let i = 0; i < 8; i += 1) {
     const next = await page.$('[data-act="dialogue-next"]');
     if (!next) break;
@@ -352,32 +364,39 @@ try {
     game.play.y = wild.y;
   });
   await page.waitForSelector('[data-act="encounter-catch"]', { timeout: 4000 });
-  await sleep(800);
+  await page.waitForFunction(() => {
+    const img = document.querySelector('.encounter-sheet img.standing');
+    return !!img && img.complete && img.naturalWidth >= 800;
+  });
   const encounterFit = await page.evaluate(() => {
-    const canvas = document.querySelector('.encounter-sheet canvas.portrait');
-    const rect = canvas.getBoundingClientRect();
+    const img = document.querySelector('.encounter-sheet img.standing');
+    const frame = img.closest('.portrait-frame');
+    const stage = document.querySelector('.encounter-sheet .stage');
+    const rect = frame.getBoundingClientRect();
+    const stageBox = stage.getBoundingClientRect();
     const buttons = ['encounter-catch', 'encounter-fight', 'encounter-leave'].map((act) => {
       const button = document.querySelector(`[data-act="${act}"]`);
       const box = button.getBoundingClientRect();
       return { act, top: box.top, bottom: box.bottom, height: box.height };
     });
-    const ctx = canvas.getContext('2d');
-    const pixel = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.62), 1, 1).data;
     return {
-      tag: canvas.tagName,
-      bw: canvas.width,
-      bh: canvas.height,
+      tag: img.tagName,
+      src: img.getAttribute('src'),
+      nw: img.naturalWidth,
+      nh: img.naturalHeight,
       rw: rect.width,
       rh: rect.height,
-      alpha: pixel[3],
+      inside: rect.left >= stageBox.left - 1 && rect.right <= stageBox.right + 1 && rect.top >= stageBox.top - 1 && rect.bottom <= stageBox.bottom + 1,
       buttons,
       innerHeight: window.innerHeight,
     };
   });
-  if (encounterFit.tag !== 'CANVAS' || encounterFit.bw > 512 || encounterFit.bh > 512 || encounterFit.rw > 180 || encounterFit.rh > 160) {
-    throw new Error(`焰尾狐肖像尺寸异常 ${JSON.stringify(encounterFit)}`);
+  if (encounterFit.tag !== 'IMG' || !String(encounterFit.src).includes('/portraits/yanwei.jpg') || encounterFit.nw < 800 || encounterFit.nh < 1000) {
+    throw new Error(`焰尾狐立绘没有加载 ${JSON.stringify(encounterFit)}`);
   }
-  if (encounterFit.alpha < 20) throw new Error('焰尾狐肖像没有画出来');
+  if (encounterFit.rw > 180 || encounterFit.rh > 160 || encounterFit.rw < 24 || !encounterFit.inside) {
+    throw new Error(`焰尾狐立绘尺寸异常 ${JSON.stringify(encounterFit)}`);
+  }
   for (const button of encounterFit.buttons) {
     if (button.top < 0 || button.bottom > encounterFit.innerHeight + 1 || button.height < 20) {
       throw new Error(`遭遇按钮不在画面内 ${JSON.stringify(encounterFit)}`);
@@ -443,7 +462,7 @@ try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await sleep(120);
     await page.screenshot({ path: `${shotDir}/encounter-${width}x${height}.png` });
-    await assertInside(page, [['.stage canvas', '.stage']], `遭遇图片 ${width}x${height}`);
+    await assertInside(page, [['.stage .portrait-frame', '.stage']], `遭遇图片 ${width}x${height}`);
     const encounterFit = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('[data-act="encounter-catch"], [data-act="encounter-fight"], [data-act="encounter-leave"]')];
       const sheet = document.querySelector('.encounter-sheet');
@@ -722,7 +741,16 @@ try {
   if (!healed) throw new Error('治疗没有恢复体力');
 
   await page.click('[data-act="menu"]');
+  const menuArt = await page.$eval('.identity img.standing', (img) => img.getAttribute('src'));
+  const menuName = await page.$eval('.identity strong', (el) => el.textContent);
+  if (!menuArt?.includes('/portraits/player.jpg') || menuName !== '星旅') {
+    throw new Error(`菜单没有旅人立绘 ${menuName} ${menuArt}`);
+  }
   await page.click('[data-arg="team"]');
+  await page.waitForFunction(() => {
+    const img = document.querySelector('.mon-card img.standing');
+    return !!img && img.complete && img.naturalWidth >= 800 && (img.getAttribute('src') || '').includes('/portraits/lujiao.jpg');
+  });
   await page.screenshot({ path: `${shotDir}/07-team.png` });
   const teamStats = await page.evaluate(() => {
     const text = document.querySelector('.sheet')?.textContent ?? '';
@@ -736,7 +764,7 @@ try {
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
     await page.setViewport({ width, height });
     await sleep(80);
-    await assertInside(page, [['.mon-card canvas', '.mon-card']], `队伍图片 ${width}x${height}`);
+    await assertInside(page, [['.mon-card .portrait-frame', '.mon-card']], `队伍图片 ${width}x${height}`);
     await assertDialogActions(page, ['panel'], `队伍 ${width}x${height}`);
     await page.screenshot({ path: `${shotDir}/team-${width}x${height}.png` });
   }
@@ -747,7 +775,7 @@ try {
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
     await page.setViewport({ width, height });
     await sleep(80);
-    await assertInside(page, [['.dex-card canvas', '.dex-card']], `图鉴图片 ${width}x${height}`);
+    await assertInside(page, [['.dex-card .portrait-frame', '.dex-card']], `图鉴图片 ${width}x${height}`);
     await page.screenshot({ path: `${shotDir}/dex-${width}x${height}.png` });
   }
   await page.setViewport({ width: 1280, height: 800 });

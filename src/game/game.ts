@@ -38,6 +38,7 @@ import {
   drawSign,
   drawTile,
   drawTree,
+  paintActor,
   paintPortrait,
   paintRing,
 } from './sprites';
@@ -692,6 +693,10 @@ export class Game implements GameHost {
     document.querySelectorAll<HTMLCanvasElement>('canvas[data-species]').forEach((canvas) => {
       const id = canvas.dataset.species as SpeciesId | undefined;
       if (id) paintPortrait(canvas, id, this.time, canvas.dataset.faint === '1');
+    });
+    document.querySelectorAll<HTMLCanvasElement>('canvas[data-actor]').forEach((canvas) => {
+      const id = canvas.dataset.actor;
+      if (id) paintActor(canvas, id, this.time);
     });
     const ring = document.getElementById('catch-ring');
     if (ring instanceof HTMLCanvasElement && this.mode === 'capture') {

@@ -17,4 +17,12 @@ if (main.includes('WebGLRenderer')) throw new Error('2D 首屏不应该打包 3D
 if (!fs.existsSync(new URL('../dist/.nojekyll', import.meta.url))) {
   throw new Error('dist 缺少 .nojekyll');
 }
+const portraits = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'player', 'grandma', 'qinghe', 'lanchuan'];
+for (const id of portraits) {
+  const file = new URL(`../dist/portraits/${id}.jpg`, import.meta.url);
+  if (!fs.existsSync(file)) throw new Error(`dist 缺少立绘 portraits/${id}.jpg`);
+}
+if (!main.includes('/starbud-island/') || !main.includes('portraits/')) {
+  throw new Error('主脚本没有把立绘挂在 /starbud-island/portraits/ 下');
+}
 console.log('dist 相对路径检查通过');
