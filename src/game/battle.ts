@@ -60,6 +60,10 @@ function clearBody(battle: Battle, mon: Mon): void {
   fighter.rootTurns = 0;
   fighter.dotRatio = 0;
   fighter.hotRatio = 0;
+  fighter.bonusFlat = 0;
+  fighter.bonusPercent = 0;
+  fighter.cutFlat = 0;
+  fighter.cutPercent = 0;
 }
 
 function foe(battle: Battle): Mon {

@@ -71,6 +71,10 @@ export interface MoveDef {
   kind: AttackKind | '';
   stat: 'atk' | 'def' | 'spd' | '';
   cleanse: boolean;
+  bonusFlat: number;
+  bonusPercent: number;
+  cutFlat: number;
+  cutPercent: number;
   desc: string;
 }
 
@@ -94,6 +98,10 @@ export interface Fighter {
   hotTurns: number;
   hotRatio: number;
   rootTurns: number;
+  bonusFlat: number;
+  bonusPercent: number;
+  cutFlat: number;
+  cutPercent: number;
   cd: Record<string, number>;
 }
 

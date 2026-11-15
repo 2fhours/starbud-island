@@ -131,14 +131,30 @@ export interface DamageResult {
   stopped: boolean;
 }
 
-export function settleDamage(attackBonus: number, defenseCut: number): { damage: number; stopped: boolean } {
-  const raw = attackBonus - defenseCut;
-  if (raw < 1) return { damage: 1, stopped: true };
-  return { damage: Math.floor(raw), stopped: false };
+export interface StrikeMods {
+  bonusFlat?: number;
+  bonusPercent?: number;
+  cutFlat?: number;
+  cutPercent?: number;
+}
+
+export const BONUS_PERCENT_MAX = 0.5;
+export const CUT_PERCENT_MAX = 0.6;
+
+export function settleDamage(attackBase: number, defenseFlat: number, mods: StrikeMods = {}): { damage: number; stopped: boolean; attackBonus: number; defenseCut: number } {
+  const bonusPercent = clamp(mods.bonusPercent ?? 0, 0, BONUS_PERCENT_MAX);
+  const cutPercent = clamp(mods.cutPercent ?? 0, 0, CUT_PERCENT_MAX);
+  const bonusFlat = Math.max(0, mods.bonusFlat ?? 0);
+  const extraCut = Math.max(0, mods.cutFlat ?? 0);
+  const attackBonus = attackBase * (1 + bonusPercent) + bonusFlat;
+  const defenseCut = defenseFlat + extraCut;
+  const raw = attackBonus * (1 - cutPercent) - defenseCut;
+  if (raw < 1) return { damage: 1, stopped: true, attackBonus, defenseCut };
+  return { damage: Math.floor(raw), stopped: false, attackBonus, defenseCut };
 }
 
 export function blankFighter(mon: Mon): Fighter {
-  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, cd: {} };
+  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
 }
 
 export function aspectOf(mon: Mon): TypeId {
@@ -207,7 +223,7 @@ export function cycleAspect(mon: Mon): string {
   return `属性变为${TYPE_META[next].label}`;
 }
 
-export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random): DamageResult {
+export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random, mods: StrikeMods = {}): DamageResult {
   if (move.power <= 0) return { damage: 0, mult: 1, stab: false, attackBonus: 0, defenseCut: 0, stopped: false };
   const mult = relate(move.type, aspectOf(defender)).mult;
   const stab = move.type === aspectOf(attacker);
@@ -220,10 +236,15 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
   const roll = 1 - spread + rng() * spread * 2;
-  const attackBonus = (move.power * atk / 60) * stabMul * mult * roll;
-  const defenseCut = defStat * pierce;
-  const settled = settleDamage(attackBonus, defenseCut);
-  return { damage: settled.damage, mult, stab, attackBonus, defenseCut, stopped: settled.stopped };
+  const attackBase = (move.power * atk / 60) * stabMul * mult * roll;
+  const defenseFlat = defStat * pierce;
+  const settled = settleDamage(attackBase, defenseFlat, {
+    bonusFlat: (mods.bonusFlat ?? 0) + (move.bonusFlat ?? 0),
+    bonusPercent: (mods.bonusPercent ?? 0) + (move.bonusPercent ?? 0),
+    cutFlat: mods.cutFlat ?? 0,
+    cutPercent: mods.cutPercent ?? 0,
+  });
+  return { damage: settled.damage, mult, stab, attackBonus: settled.attackBonus, defenseCut: settled.defenseCut, stopped: settled.stopped };
 }
 
 export function readDelay(text: string, fast = false): number {
@@ -294,7 +315,12 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     }
   }
   if (move.cat === 'attack') {
-    const result = damageOf(user.mon, foe.mon, move, rng);
+    const result = damageOf(user.mon, foe.mon, move, rng, {
+      bonusFlat: user.bonusFlat,
+      bonusPercent: user.bonusPercent,
+      cutFlat: foe.cutFlat,
+      cutPercent: foe.cutPercent,
+    });
     const absorbed = Math.min(foe.shield, result.damage);
     foe.shield -= absorbed;
     const hpLoss = result.damage - absorbed;
@@ -317,6 +343,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     logs.push(`${an}获得 ${gained} 点护盾`);
     if (move.effect === 'ward') {
       user.mon.stages.def = clamp(user.mon.stages.def + 1, -3, 3);
+      user.cutFlat += move.cutFlat;
+      user.cutPercent = clamp(user.cutPercent + move.cutPercent, 0, CUT_PERCENT_MAX);
       logs.push(`${an}的防御上升了`);
     }
     if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
@@ -335,6 +363,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
   } else if (move.cat === 'aid') {
     const stat = move.stat || 'atk';
     user.mon.stages[stat] = clamp(user.mon.stages[stat] + 1, -3, 3);
+    user.bonusFlat += move.bonusFlat;
+    user.bonusPercent = clamp(user.bonusPercent + move.bonusPercent, 0, BONUS_PERCENT_MAX);
     logs.push(`${an}的${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}上升了`);
     if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
   } else if (move.effect === 'root') {

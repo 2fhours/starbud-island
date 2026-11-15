@@ -82,7 +82,21 @@ describe('设定文档和公式一致', () => {
     const clash = damageOf(yin, yang, getMove('yinjin-basic-attack-0'), () => 0.5);
     expect(clash.mult).toBe(1.5);
     expect(clash.damage).toBe(16);
-    expect(settleDamage((46 * 27 / 60) * 1.2 * 2 * 1.5, 28)).toEqual({ damage: 46, stopped: false });
+    expect(settleDamage((46 * 27 / 60) * 1.2 * 2 * 1.5, 28)).toMatchObject({ damage: 46, stopped: false });
+    expect(damageOf(plainAttacker, makeMon('dianrong', 8, 1, true, zero), getMove('chunyang-basic-attack-0'), () => 0.5, { bonusFlat: 4 }).damage).toBe(13);
+    expect(damageOf(plainAttacker, makeMon('dianrong', 8, 1, true, zero), getMove('chunyang-basic-attack-0'), () => 0.5, { bonusPercent: 0.1 }).damage).toBe(12);
+    expect(damageOf(plainAttacker, makeMon('dianrong', 8, 1, true, zero), getMove('chunyang-basic-attack-0'), () => 0.5, {
+      bonusFlat: 4,
+      bonusPercent: 0.1,
+      cutFlat: 4,
+      cutPercent: 0.1,
+    }).damage).toBe(8);
+    const aided = blankFighter(makeMon('lujiao', 8, 1, true, zero));
+    resolveSkill(aided, blankFighter(makeMon('dianrong', 8, 1, true, zero)), getMove('yangmu-basic-aid-0'), () => 0.5);
+    expect(aided.bonusFlat).toBe(4);
+    expect(aided.bonusPercent).toBe(0.08);
+    expect(getMove('yangmu-mid-attack-0').bonusFlat).toBe(6);
+    expect(getMove('yangmu-basic-guard-1').cutPercent).toBe(0.1);
     const feed = damageOf(attacker, makeMon('lujiao', 8, 1, true, zero), move, () => 0.5);
     expect(feed.damage).toBe(1);
     expect(feed.stopped).toBe(true);
@@ -94,6 +108,9 @@ describe('设定文档和公式一致', () => {
     const blockedLog = resolveSkill(blankFighter(attacker), blankFighter(tank), move, () => 0.5);
     expect(blockedLog.join('')).toContain('没能破开防御');
     expect(formulas).toContain('样例普通 9');
+    expect(formulas).toContain('样例固定 13');
+    expect(formulas).toContain('样例百分比 12');
+    expect(formulas).toContain('样例两边 8');
     expect(formulas).toContain('样例伤害 21');
     expect(formulas).toContain('样例伤害低 17');
     expect(formulas).toContain('样例伤害高 25');

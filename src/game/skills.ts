@@ -132,6 +132,10 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
   const cost = skillCost(tier, cat, effect);
   const stat = cat === 'aid' ? STATS[index] : cat === 'guard' && effect === 'ward' ? 'def' : cat === 'status' && effect === 'blight' ? (['atk', 'def', 'spd', 'atk', 'atk', 'atk', 'def', 'atk'] as const)[index] : '';
   const cleanse = effect === 'cleanse';
+  const bonusFlat = cat === 'attack' && effect === 'recoil' ? 6 : cat === 'aid' && effect === 'buff' ? 4 : 0;
+  const bonusPercent = cat === 'attack' && effect === 'strike' && tier !== 'basic' ? 0.1 : cat === 'aid' && effect === 'buff' ? 0.08 : 0;
+  const cutFlat = cat === 'guard' && effect === 'ward' ? 4 : 0;
+  const cutPercent = cat === 'guard' && effect === 'ward' ? 0.1 : 0;
   const move: MoveDef = {
     id: `${type}-${tier}-${cat}-${slot}`,
     name,
@@ -149,6 +153,10 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
     kind,
     stat,
     cleanse,
+    bonusFlat,
+    bonusPercent,
+    cutFlat,
+    cutPercent,
     desc: '',
   };
   move.desc = describe(move);
@@ -161,17 +169,19 @@ function describe(move: MoveDef): string {
   const cool = move.cooldown ? `使用后冷却 ${move.cooldown} 回合。` : '';
   const mana = move.cost > 0 ? `消耗 ${move.cost} 点法力。` : '不消耗法力。';
   const form = move.kind === 'magic' ? '魔法' : '物理';
-  if (move.effect === 'strike') return `${tier}${cat}。${form}伤害，威力 ${move.power}。${mana}${cool}`;
+  const bump = `${move.bonusPercent ? `伤害提高 ${pct(move.bonusPercent)}%。` : ''}${move.bonusFlat ? `额外增加 ${move.bonusFlat} 点。` : ''}`;
+  const soften = `${move.cutPercent ? `受到的伤害降低 ${pct(move.cutPercent)}%。` : ''}${move.cutFlat ? `再减少 ${move.cutFlat} 点。` : ''}`;
+  if (move.effect === 'strike') return `${tier}${cat}。${form}伤害，威力 ${move.power}。${bump}${mana}${cool}`;
   if (move.effect === 'pierce') return `${tier}${cat}。${form}伤害，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
-  if (move.effect === 'recoil') return `${tier}${cat}。${form}伤害，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${mana}${cool}`;
+  if (move.effect === 'recoil') return `${tier}${cat}。${form}伤害，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${mana}${cool}`;
   if (move.effect === 'dotstrike') return `${tier}${cat}。${form}伤害，威力 ${move.power}，并在 ${move.turns} 回合内附加持续伤害。${mana}${cool}`;
   if (move.effect === 'shield') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${mana}${cool}`;
-  if (move.effect === 'ward') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${mana}${cool}`;
+  if (move.effect === 'ward') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${soften}${mana}${cool}`;
   if (move.effect === 'mend') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}%，单次不超过 40%。${mana}${cool}`;
   if (move.effect === 'hot') return `${tier}${cat}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${mana}${cool}`;
   if (move.effect === 'cleanse' && move.cat === 'heal') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
   if (move.effect === 'cleanse') return `${tier}${cat}。净化一个减益，并提升${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
-  if (move.effect === 'buff') return `${tier}${cat}。提升自己的${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}一阶。${mana}${cool}`;
+  if (move.effect === 'buff') return `${tier}${cat}。提升自己的${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}一阶。${bump}${mana}${cool}`;
   if (move.effect === 'blight') return `${tier}${cat}。在 ${move.turns} 回合内造成持续伤害，并降低对方${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
   return `${tier}${cat}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${mana}${cool}`;
 }
@@ -228,6 +238,10 @@ export function basicStrike(type: TypeId): MoveDef {
     kind: 'physical',
     stat: '',
     cleanse: false,
+    bonusFlat: 0,
+    bonusPercent: 0,
+    cutFlat: 0,
+    cutPercent: 0,
     desc: '不消耗法力的物理攻击。法力不够时也能用。',
   };
 }
