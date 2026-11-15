@@ -1,9 +1,10 @@
 import { getSpecies } from './data';
 import { effectiveness } from './elements';
+import { basicStrike } from './skills';
 import {
+  actionOrder,
   aspectOf,
   blankFighter,
-  combatStat,
   expGain,
   grantExp,
   maxHp,
@@ -108,7 +109,7 @@ function chooseEnemyMove(battle: Battle): number {
   let bestScore = -1;
   (attacker.moves ?? []).forEach((_, index) => {
     const move = moveByIndex(attacker, index);
-    if ((cd[move.id] ?? 0) > 0) return;
+    if ((cd[move.id] ?? 0) > 0 || move.cost > (attacker.mp ?? 0)) return;
     let score = 1;
     if (move.cat === 'heal') score = attacker.hp <= Math.ceil(maxHp(attacker) * 0.45) ? 80 : 6;
     else if (move.cat === 'guard') score = side(battle, attacker).shield > maxHp(attacker) * 0.2 ? 4 : 36;
@@ -120,7 +121,7 @@ function chooseEnemyMove(battle: Battle): number {
       best = index;
     }
   });
-  return best;
+  return bestScore < 0 ? -1 : best;
 }
 
 function act(battle: Battle, actor: Mon, target: Mon, moveIndex: number, rng: () => number): string[] {
@@ -128,7 +129,8 @@ function act(battle: Battle, actor: Mon, target: Mon, moveIndex: number, rng: ()
   const other = side(battle, target);
   const open = opening(user);
   if (open.skip) return open.logs;
-  return resolveSkill(user, other, moveByIndex(actor, moveIndex), rng);
+  const move = moveIndex < 0 ? basicStrike(aspectOf(actor)) : moveByIndex(actor, moveIndex);
+  return resolveSkill(user, other, move, rng);
 }
 
 function enemyActs(battle: Battle, rng: () => number): string[] {
@@ -144,7 +146,7 @@ export function playerMove(battle: Battle, moveIndex: number, rng: () => number 
   const defender = foe(battle);
   if (attacker.hp <= 0 || defender.hp <= 0) return [];
   const logs: string[] = [];
-  const playerFirst = combatStat(attacker, 'spd') >= combatStat(defender, 'spd');
+  const playerFirst = actionOrder(attacker) >= actionOrder(defender);
   const foeIndex = battle.fIndex;
   const doPlayer = () => {
     if (battle.phase !== 'input' || attacker.hp <= 0 || foe(battle).hp <= 0) return;

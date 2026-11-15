@@ -1,6 +1,7 @@
 import { getSpecies } from './data';
-import { emptyDex, ensureLoadout, maxHp } from './logic';
-import type { Dir, Mon, PlayState, SpeciesId, TypeId } from './types';
+import { emptyDex, ensureLoadout, maxHp, maxMp } from './logic';
+import { convertLegacyHp, ivFromUid, legacyMaxHp, validIvs } from './stats';
+import type { Dir, Five, Mon, PlayState, SpeciesId, TypeId } from './types';
 import { SAVE_KEY } from './types';
 import { TYPE_META } from './elements';
 
@@ -14,17 +15,31 @@ function asMon(value: unknown): Mon | null {
   if (typeof raw.level !== 'number' || raw.level < 1 || raw.level > 30) return null;
   const speciesId = raw.speciesId as SpeciesId;
   const aspect = typeof raw.aspect === 'string' && raw.aspect in TYPE_META ? raw.aspect as TypeId : getSpecies(speciesId).type;
+  const uid = typeof raw.uid === 'string' ? raw.uid : 'restored';
+  const level = Math.floor(raw.level);
+  let migrated = false;
+  let ivs: Five;
+  if (validIvs(raw.ivs)) {
+    ivs = raw.ivs;
+    migrated = true;
+  } else ivs = ivFromUid(uid);
   const mon: Mon = {
-    uid: typeof raw.uid === 'string' ? raw.uid : 'restored',
+    uid,
     speciesId,
-    level: Math.floor(raw.level),
+    level,
     exp: typeof raw.exp === 'number' && raw.exp >= 0 ? Math.floor(raw.exp) : 0,
     hp: typeof raw.hp === 'number' ? Math.floor(raw.hp) : 1,
+    mp: 0,
+    ivs,
     stages: { atk: 0, def: 0, spd: 0 },
     aspect,
     moves: Array.isArray(raw.moves) ? raw.moves.filter((id) => typeof id === 'string') : [],
   };
-  mon.hp = Math.max(0, Math.min(maxHp(mon), mon.hp));
+  const cap = maxHp(mon);
+  if (migrated) mon.hp = Math.max(0, Math.min(cap, mon.hp));
+  else mon.hp = convertLegacyHp(mon.hp, legacyMaxHp(speciesId, level), cap);
+  const mpCap = maxMp(mon);
+  mon.mp = typeof raw.mp === 'number' ? Math.max(0, Math.min(mpCap, Math.floor(raw.mp))) : mpCap;
   ensureLoadout(mon);
   return mon;
 }

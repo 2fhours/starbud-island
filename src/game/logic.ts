@@ -1,7 +1,8 @@
 import { TYPE_META, relate } from './elements';
 import { getMove, skillsOf } from './skills';
 import { getSpecies } from './data';
-import type { Fighter, Mon, MoveCat, MoveDef, QuestFlags, SpeciesId, Timing, TypeId } from './types';
+import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
+import type { Fighter, Five, Mon, MoveCat, MoveDef, QuestFlags, SpeciesId, Timing, TypeId } from './types';
 import { BALL_TOP_UP, LOADOUT_LIMIT, MAX_LEVEL, TEAM_LIMIT, TIER_LEVEL } from './types';
 
 let uidSeq = 1;
@@ -15,14 +16,28 @@ export function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-export function maxHp(mon: Mon): number {
-  const base = getSpecies(mon.speciesId).bases.hp;
-  return Math.floor((base * 2 * mon.level) / 40) + mon.level + 12;
+export function monIvs(mon: Mon): Five {
+  return validIvs(mon.ivs) ? mon.ivs : ivFromUid(mon.uid);
 }
 
-export function combatStat(mon: Mon, key: 'atk' | 'def' | 'spd'): number {
-  const base = getSpecies(mon.speciesId).bases[key];
-  return Math.floor((base * 2 * mon.level) / 45) + 6;
+export function profile(mon: Mon) {
+  return derive(getSpecies(mon.speciesId).race, monIvs(mon), mon.level);
+}
+
+export function maxHp(mon: Mon): number {
+  return profile(mon).maxHp;
+}
+
+export function maxMp(mon: Mon): number {
+  return profile(mon).maxMp;
+}
+
+export function speedPoint(mon: Mon): number {
+  return Math.max(1, Math.floor(profile(mon).core.spd * stageMul(mon.stages.spd)));
+}
+
+export function actionOrder(mon: Mon): number {
+  return Math.max(1, Math.floor(profile(mon).action * stageMul(mon.stages.spd)));
 }
 
 export function stageMul(stage: number): number {
@@ -38,18 +53,21 @@ export function expGain(foeLevel: number, baseExp: number, trainer: boolean): nu
   return Math.max(8, Math.floor((foeLevel * baseExp * (trainer ? 1.45 : 1)) / 7));
 }
 
-export function makeMon(speciesId: SpeciesId, level: number, hpRatio = 1, lockAspect = false): Mon {
+export function makeMon(speciesId: SpeciesId, level: number, hpRatio = 1, lockAspect = false, ivs?: Five): Mon {
   const mon: Mon = {
     uid: newUid(),
     speciesId,
     level,
     exp: 0,
     hp: 1,
+    mp: 0,
+    ivs: ivs ? { ...ivs } : rollIvs(),
     stages: { atk: 0, def: 0, spd: 0 },
     aspect: getSpecies(speciesId).type,
   };
   if (!lockAspect) mon.aspect = flipAspect(getSpecies(speciesId).type, mon.uid);
   mon.hp = clamp(Math.round(maxHp(mon) * hpRatio), 1, maxHp(mon));
+  mon.mp = maxMp(mon);
   ensureLoadout(mon);
   return mon;
 }
@@ -59,7 +77,9 @@ export function cloneMon(mon: Mon): Mon {
     ...mon,
     uid: newUid(),
     stages: { atk: 0, def: 0, spd: 0 },
+    ivs: { ...monIvs(mon) },
     hp: clamp(mon.hp, 0, maxHp(mon)),
+    mp: clamp(mon.mp ?? 0, 0, maxMp(mon)),
     moves: [...(mon.moves ?? [])],
   };
   ensureLoadout(copy);
@@ -69,6 +89,7 @@ export function cloneMon(mon: Mon): Mon {
 export function healTeam(team: Mon[]): void {
   for (const mon of team) {
     mon.hp = maxHp(mon);
+    mon.mp = maxMp(mon);
     mon.stages = { atk: 0, def: 0, spd: 0 };
   }
 }
@@ -88,9 +109,13 @@ export function grantExp(mon: Mon, amount: number): string[] {
   while (mon.level < MAX_LEVEL && mon.exp >= expToNext(mon.level)) {
     mon.exp -= expToNext(mon.level);
     const before = maxHp(mon);
+    const beforeMp = maxMp(mon);
     mon.level += 1;
     const after = maxHp(mon);
-    mon.hp = clamp(mon.hp + (after - before), 1, after);
+    const afterMp = maxMp(mon);
+    const floorHp = mon.hp > 0 ? 1 : 0;
+    mon.hp = clamp(mon.hp + (after - before), floorHp, after);
+    mon.mp = clamp((mon.mp ?? 0) + (afterMp - beforeMp), 0, afterMp);
     logs.push(`${name}升到了 ${mon.level} 级，变得更结实了`);
   }
   if (mon.level >= MAX_LEVEL) mon.exp = 0;
@@ -177,8 +202,11 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   if (move.power <= 0) return { damage: 0, mult: 1, stab: false };
   const mult = relate(move.type, aspectOf(defender)).mult;
   const stab = move.type === aspectOf(attacker);
-  const atk = combatStat(attacker, 'atk') * stageMul(attacker.stages.atk);
-  const defStat = combatStat(defender, 'def') * stageMul(defender.stages.def);
+  const kind = move.kind === 'magic' ? 'magic' : 'physical';
+  const atkProfile = profile(attacker);
+  const defProfile = profile(defender);
+  const atk = kind === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
+  const defStat = kind === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
   const def = Math.max(1, move.effect === 'pierce' ? defStat * 0.7 : defStat);
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
   const roll = 1 - spread + rng() * spread * 2;
@@ -235,6 +263,24 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
   if ((user.cd[move.id] ?? 0) > 0) {
     logs.push(`${move.name}还在冷却`);
     return logs;
+  }
+  if ((user.mon.mp ?? 0) < move.cost) {
+    logs.push(`${an}的法力不足`);
+    return logs;
+  }
+  user.mon.mp = Math.max(0, (user.mon.mp ?? 0) - move.cost);
+  if (move.cat === 'attack' || move.cat === 'status') {
+    const hit = hitChance(profile(user.mon).core.spi, speedPoint(user.mon));
+    if (rng() >= hit) {
+      logs.push(`${an}没有命中`);
+      if (move.cooldown > 0) user.cd[move.id] = move.cooldown;
+      return logs;
+    }
+    if (rng() < evasionChance(speedPoint(foe.mon))) {
+      logs.push(`${dn}闪避了攻击`);
+      if (move.cooldown > 0) user.cd[move.id] = move.cooldown;
+      return logs;
+    }
   }
   if (move.cat === 'attack') {
     const result = damageOf(user.mon, foe.mon, move, rng);
@@ -302,6 +348,13 @@ export function tickStatus(fighter: Fighter): string[] {
   if (mon.hp <= 0) return [];
   const logs: string[] = [];
   const name = monName(mon);
+  const mpMax = maxMp(mon);
+  if (typeof mon.mp !== 'number') mon.mp = 0;
+  if (mon.mp < mpMax) {
+    const before = mon.mp ?? 0;
+    mon.mp = Math.min(mpMax, before + Math.max(1, Math.floor(mpMax * 0.05)));
+    if (mon.mp > before) logs.push(`${name}恢复了 ${mon.mp - before} 点法力`);
+  }
   if (fighter.hotTurns > 0) {
     const cap = Math.floor(maxHp(mon) * 0.08);
     const gain = Math.min(cap, maxHp(mon) - mon.hp, Math.max(0, Math.floor(maxHp(mon) * fighter.hotRatio)));

@@ -50,14 +50,15 @@ describe('芽灵与属性', () => {
 
 describe('战斗数值', () => {
   it('克制伤害高于抵抗，防御强化会减伤', () => {
-    const attacker = makeMon('luzhu', 8);
+    const ivs = { con: 10, str: 10, int: 10, spi: 10, spd: 10 };
+    const attacker = makeMon('luzhu', 8, 1, true, ivs);
     const move = getMove(getSpecies('luzhu').moves[0]);
-    const superHit = damageOf(attacker, makeMon('yanwei', 8), move, fixed);
-    const resist = damageOf(attacker, makeMon('lujiao', 8), move, fixed);
+    const superHit = damageOf(attacker, makeMon('yanwei', 8, 1, true, ivs), move, fixed);
+    const resist = damageOf(attacker, makeMon('lujiao', 8, 1, true, ivs), move, fixed);
     expect(superHit.mult).toBe(1.5);
     expect(resist.mult).toBe(0.85);
     expect(superHit.damage).toBeGreaterThan(resist.damage);
-    const bulky = makeMon('yanwei', 8);
+    const bulky = makeMon('yanwei', 8, 1, true, ivs);
     bulky.stages.def = 2;
     expect(damageOf(attacker, bulky, move, fixed).damage).toBeLessThan(superHit.damage);
   });
@@ -71,7 +72,7 @@ describe('战斗数值', () => {
     const player = [makeMon('lujiao', 8)];
     const battle = prepareBattle(player, [makeMon('luzhu', 3)], 'wild', '');
     let guard = 0;
-    while (battle.phase === 'input' && guard < 12) {
+    while (battle.phase === 'input' && guard < 40) {
       playerMove(battle, 0, fixed);
       guard += 1;
     }

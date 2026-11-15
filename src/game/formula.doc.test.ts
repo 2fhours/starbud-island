@@ -4,7 +4,7 @@ import { playerMove, prepareBattle } from './battle';
 import { effectiveness } from './elements';
 import {
   catchProbability,
-  combatStat,
+  actionOrder,
   damageOf,
   expGain,
   ensureLoadout,
@@ -38,14 +38,14 @@ describe('设定文档和公式一致', () => {
   });
 
   it('等级、经验和属性样例与代码相同', () => {
-    const deer = makeMon('lujiao', 5, 1, true);
-    expect(maxHp(deer)).toBe(29);
-    expect(combatStat(deer, 'atk')).toBe(17);
+    const zero = { con: 0, str: 0, int: 0, spi: 0, spd: 0 };
+    const deer = makeMon('lujiao', 5, 1, true, zero);
+    expect(maxHp(deer)).toBe(76);
     expect(expToNext(5)).toBe(93);
     expect(expGain(5, 62, false)).toBe(44);
     expect(expGain(5, 62, true)).toBe(64);
-    expect(formulas).toContain('样例体力 29');
-    expect(formulas).toContain('样例攻击 17');
+    expect(formulas).toContain('样例体质 37');
+    expect(formulas).toContain('样例生命 76');
     expect(formulas).toContain('样例经验 93、44、64');
     const stayed = makeMon('lujiao', 5, 1, true);
     grantExp(stayed, 40);
@@ -60,36 +60,37 @@ describe('设定文档和公式一致', () => {
   });
 
   it('伤害、治疗和护盾样例与代码相同', () => {
-    const attacker = makeMon('luzhu', 8, 1, true);
+    const zero = { con: 0, str: 0, int: 0, spi: 0, spd: 0 };
+    const attacker = makeMon('luzhu', 8, 1, true, zero);
     const move = getMove('yinshui-basic-attack-0');
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true), move, () => 0.5).damage).toBe(19);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true), move, () => 0).damage).toBe(17);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true), move, () => 1).damage).toBe(20);
-    expect(damageOf(attacker, makeMon('lujiao', 8, 1, true), move, () => 0.5).damage).toBe(10);
-    expect(formulas).toContain('样例伤害 19');
-    expect(formulas).toContain('样例伤害低 17');
-    expect(formulas).toContain('样例伤害高 20');
-    expect(formulas).toContain('样例相生伤害 10');
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0.5).damage).toBe(16);
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0).damage).toBe(15);
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 1).damage).toBe(17);
+    expect(damageOf(attacker, makeMon('lujiao', 8, 1, true, zero), move, () => 0.5).damage).toBe(8);
+    expect(formulas).toContain('样例伤害 16');
+    expect(formulas).toContain('样例伤害低 15');
+    expect(formulas).toContain('样例伤害高 17');
+    expect(formulas).toContain('样例相生伤害 8');
 
-    const hurt = makeMon('lujiao', 5, 0.4, true);
-    expect(hurt.hp).toBe(12);
-    resolveSkill(blankFighter(hurt), blankFighter(makeMon('dianrong', 5, 1, true)), getMove('yangmu-basic-heal-0'), () => 0);
-    expect(hurt.hp).toBe(16);
-    expect(formulas).toContain('样例回复 4');
+    const hurt = makeMon('lujiao', 5, 0.4, true, zero);
+    expect(hurt.hp).toBe(30);
+    resolveSkill(blankFighter(hurt), blankFighter(makeMon('dianrong', 5, 1, true, zero)), getMove('yangmu-basic-heal-0'), () => 0.5);
+    expect(hurt.hp).toBe(40);
+    expect(formulas).toContain('样例回复 10');
 
-    const full = makeMon('lujiao', 5, 1, true);
+    const full = makeMon('lujiao', 5, 1, true, zero);
     const shielded = blankFighter(full);
     const guard = getMove('yangmu-basic-guard-0');
-    for (let i = 0; i < 6; i += 1) resolveSkill(shielded, blankFighter(makeMon('dianrong', 5, 1, true)), guard, () => 0);
-    expect(shielded.shield).toBe(10);
-    expect(formulas).toContain('样例护盾 10');
+    for (let i = 0; i < 6; i += 1) resolveSkill(shielded, blankFighter(makeMon('dianrong', 5, 1, true, zero)), guard, () => 0.5);
+    expect(shielded.shield).toBe(26);
+    expect(formulas).toContain('样例护盾 26');
 
-    const elder = makeMon('lujiao', 24, 0.2, true);
-    expect(maxHp(elder)).toBe(96);
-    expect(elder.hp).toBe(19);
-    resolveSkill(blankFighter(elder), blankFighter(makeMon('dianrong', 5, 1, true)), getMove('yangmu-divine-heal-0'), () => 0);
-    expect(elder.hp).toBe(49);
-    expect(formulas).toContain('样例神级回复 30');
+    const elder = makeMon('lujiao', 24, 0.2, true, zero);
+    expect(maxHp(elder)).toBe(183);
+    expect(elder.hp).toBe(37);
+    resolveSkill(blankFighter(elder), blankFighter(makeMon('dianrong', 5, 1, true, zero)), getMove('yangmu-divine-heal-0'), () => 0.5);
+    expect(elder.hp).toBe(95);
+    expect(formulas).toContain('样例神级回复 58');
   });
 
   it('捕捉、逃跑、等待和技能总数与代码相同', () => {
@@ -111,17 +112,18 @@ describe('设定文档和公式一致', () => {
   });
 
   it('速度只比能力值，相等时玩家先动', () => {
-    expect(combatStat(makeMon('yanke', 8, 1, true), 'spd')).toBe(14);
-    expect(combatStat(makeMon('dianrong', 8, 1, true), 'spd')).toBe(31);
-    const fastFoe = prepareBattle([makeMon('yanke', 8, 1, true)], [makeMon('dianrong', 8, 1, true)], 'wild', '');
+    const zero = { con: 0, str: 0, int: 0, spi: 0, spd: 0 };
+    expect(actionOrder(makeMon('yanke', 8, 1, true, zero))).toBe(27);
+    expect(actionOrder(makeMon('dianrong', 8, 1, true, zero))).toBe(47);
+    const fastFoe = prepareBattle([makeMon('yanke', 8, 1, true, zero)], [makeMon('dianrong', 8, 1, true, zero)], 'wild', '');
     expect(playerMove(fastFoe, 0, () => 0.5)[0]).toContain('电绒鼠');
-    const tiedPlayer = makeMon('lujiao', 8, 1, true);
-    const tiedFoe = makeMon('lujiao', 8, 1, true);
+    const tiedPlayer = makeMon('lujiao', 8, 1, true, zero);
+    const tiedFoe = makeMon('lujiao', 8, 1, true, zero);
     tiedFoe.aspect = 'yinmu';
     ensureLoadout(tiedFoe);
     const tied = prepareBattle([tiedPlayer], [tiedFoe], 'wild', '');
     expect(playerMove(tied, 0, () => 0.5)[0]).toContain('叶刃');
-    expect(formulas).toContain('样例速度 31 对 14');
+    expect(formulas).toContain('样例出手 27 对 47');
   });
 
   it('游戏界面不引用内部设定文档', () => {

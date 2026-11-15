@@ -572,6 +572,12 @@ try {
     });
   });
   if (!battleVisible) throw new Error('战斗里的技能、捕捉或退开按钮不在画面内');
+  const battleResources = await page.evaluate(() => {
+    const text = document.querySelector('.battle-sheet')?.textContent ?? '';
+    const basic = document.querySelector('[data-act="battle-basic"]');
+    return { mana: text.includes('法力'), basic: !!basic && !basic.hasAttribute('disabled') };
+  });
+  if (!battleResources.mana || !battleResources.basic) throw new Error(`战斗没有法力或普通攻击 ${JSON.stringify(battleResources)}`);
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
@@ -673,7 +679,16 @@ try {
   await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.setViewport({ width: 1280, height: 800 });
   if (await page.$('[data-act="log-next"]')) throw new Error('战斗仍显示需要点击的继续按钮');
-  await page.click('[data-act="battle-move"]');
+  await page.evaluate(() => {
+    window.__xingya.rngQueue = Array(48).fill(0.5);
+  });
+  for (let i = 0; i < 8; i += 1) {
+    const done = await page.evaluate(() => window.__xingya.mode === 'explore');
+    if (done) break;
+    const button = await page.$('[data-act="battle-move"]:not([disabled]), [data-act="battle-basic"]:not([disabled])');
+    if (button) await button.evaluate((el) => el.click());
+    await sleep(60);
+  }
   await page.waitForFunction(() => window.__xingya.mode === 'explore' && window.__xingya.play.team[0].level >= 5, { timeout: 5000 });
   const afterBattle = await page.evaluate(() => ({
     mode: window.__xingya.mode,
@@ -709,10 +724,20 @@ try {
   await page.click('[data-act="menu"]');
   await page.click('[data-arg="team"]');
   await page.screenshot({ path: `${shotDir}/07-team.png` });
+  const teamStats = await page.evaluate(() => {
+    const text = document.querySelector('.sheet')?.textContent ?? '';
+    return {
+      core: ['体质', '力量', '智力', '精神', '速度'].every((label) => text.includes(label)),
+      derived: ['物攻', '物防', '魔攻', '魔防', '命中', '闪避', '出手'].every((label) => text.includes(label)),
+      hidden: text.includes('种族值') || text.includes('个体值'),
+    };
+  });
+  if (!teamStats.core || !teamStats.derived || teamStats.hidden) throw new Error(`队伍详情没有五维或露出了隐藏值 ${JSON.stringify(teamStats)}`);
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
     await page.setViewport({ width, height });
     await sleep(80);
     await assertInside(page, [['.mon-card canvas', '.mon-card']], `队伍图片 ${width}x${height}`);
+    await assertDialogActions(page, ['panel'], `队伍 ${width}x${height}`);
     await page.screenshot({ path: `${shotDir}/team-${width}x${height}.png` });
   }
   await page.setViewport({ width: 1280, height: 800 });

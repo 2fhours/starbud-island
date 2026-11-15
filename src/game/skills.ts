@@ -1,5 +1,5 @@
 import { TYPE_META } from './elements';
-import type { MoveCat, MoveDef, MoveEffect, MoveTier, TypeId } from './types';
+import type { AttackKind, MoveCat, MoveDef, MoveEffect, MoveTier, TypeId } from './types';
 import { CAT_LABEL, TIER_LABEL } from './types';
 
 const TIERS: MoveTier[] = ['basic', 'mid', 'high', 'divine'];
@@ -106,6 +106,19 @@ function pct(ratio: number): number {
   return Math.round(ratio * 100);
 }
 
+function skillCost(tier: MoveTier, cat: MoveCat, effect: MoveEffect): number {
+  if (cat === 'attack' && tier === 'basic' && effect === 'strike') return 0;
+  if (tier === 'mid') return 8;
+  if (tier === 'high') return 12;
+  if (tier === 'divine') return 18;
+  return 4;
+}
+
+function attackKind(cat: MoveCat, effect: MoveEffect): AttackKind | '' {
+  if (cat !== 'attack') return '';
+  return effect === 'pierce' || effect === 'dotstrike' ? 'magic' : 'physical';
+}
+
 function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name: string): MoveDef {
   const tier = TIERS[tierIndex];
   const index = tierIndex * 2 + slot;
@@ -115,6 +128,8 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
   const turns = [2, 2, 2, 1, 3, 1, 3, 1][index];
   const chance = [0.7, 0.75, 0.8, 0.55, 0.85, 0.6, 0.9, 0.65][index];
   const cooldown = tier === 'divine' ? 3 : tier === 'high' && (cat === 'heal' || cat === 'status') ? 2 : 0;
+  const kind = attackKind(cat, effect);
+  const cost = skillCost(tier, cat, effect);
   const stat = cat === 'aid' ? STATS[index] : cat === 'guard' && effect === 'ward' ? 'def' : cat === 'status' && effect === 'blight' ? (['atk', 'def', 'spd', 'atk', 'atk', 'atk', 'def', 'atk'] as const)[index] : '';
   const cleanse = effect === 'cleanse';
   const move: MoveDef = {
@@ -130,6 +145,8 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
     chance: cat === 'status' && effect === 'root' ? chance : 1,
     turns: effect === 'dotstrike' || effect === 'hot' || effect === 'blight' ? turns : effect === 'root' ? 1 : 0,
     cooldown,
+    cost,
+    kind,
     stat,
     cleanse,
     desc: '',
@@ -142,19 +159,21 @@ function describe(move: MoveDef): string {
   const tier = TIER_LABEL[move.tier];
   const cat = CAT_LABEL[move.cat];
   const cool = move.cooldown ? `使用后冷却 ${move.cooldown} 回合。` : '';
-  if (move.effect === 'strike') return `${tier}${cat}。直接造成伤害，威力 ${move.power}。${cool}`;
-  if (move.effect === 'pierce') return `${tier}${cat}。忽视一部分防御造成伤害，威力 ${move.power}。${cool}`;
-  if (move.effect === 'recoil') return `${tier}${cat}。造成威力 ${move.power} 的伤害，自己受到少量反震，但不会因此倒下。${cool}`;
-  if (move.effect === 'dotstrike') return `${tier}${cat}。造成威力 ${move.power} 的伤害，并在 ${move.turns} 回合内附加持续伤害。${cool}`;
-  if (move.effect === 'shield') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${cool}`;
-  if (move.effect === 'ward') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${cool}`;
-  if (move.effect === 'mend') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}%，单次不超过 40%。${cool}`;
-  if (move.effect === 'hot') return `${tier}${cat}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${cool}`;
-  if (move.effect === 'cleanse' && move.cat === 'heal') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${cool}`;
-  if (move.effect === 'cleanse') return `${tier}${cat}。净化一个减益，并提升${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${cool}`;
-  if (move.effect === 'buff') return `${tier}${cat}。提升自己的${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}一阶。${cool}`;
-  if (move.effect === 'blight') return `${tier}${cat}。在 ${move.turns} 回合内造成持续伤害，并降低对方${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${cool}`;
-  return `${tier}${cat}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${cool}`;
+  const mana = move.cost > 0 ? `消耗 ${move.cost} 点法力。` : '不消耗法力。';
+  const form = move.kind === 'magic' ? '魔法' : '物理';
+  if (move.effect === 'strike') return `${tier}${cat}。${form}伤害，威力 ${move.power}。${mana}${cool}`;
+  if (move.effect === 'pierce') return `${tier}${cat}。${form}伤害，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
+  if (move.effect === 'recoil') return `${tier}${cat}。${form}伤害，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${mana}${cool}`;
+  if (move.effect === 'dotstrike') return `${tier}${cat}。${form}伤害，威力 ${move.power}，并在 ${move.turns} 回合内附加持续伤害。${mana}${cool}`;
+  if (move.effect === 'shield') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${mana}${cool}`;
+  if (move.effect === 'ward') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${mana}${cool}`;
+  if (move.effect === 'mend') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}%，单次不超过 40%。${mana}${cool}`;
+  if (move.effect === 'hot') return `${tier}${cat}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${mana}${cool}`;
+  if (move.effect === 'cleanse' && move.cat === 'heal') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
+  if (move.effect === 'cleanse') return `${tier}${cat}。净化一个减益，并提升${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
+  if (move.effect === 'buff') return `${tier}${cat}。提升自己的${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}一阶。${mana}${cool}`;
+  if (move.effect === 'blight') return `${tier}${cat}。在 ${move.turns} 回合内造成持续伤害，并降低对方${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
+  return `${tier}${cat}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${mana}${cool}`;
 }
 
 function compile(): MoveDef[] {
@@ -191,7 +210,30 @@ const LEGACY: Record<string, string> = {
   chaopai: 'yangshui-basic-attack-1',
 };
 
+export function basicStrike(type: TypeId): MoveDef {
+  return {
+    id: 'basic-strike',
+    name: '普通攻击',
+    type,
+    tier: 'basic',
+    cat: 'attack',
+    effect: 'strike',
+    target: 'foe',
+    power: 32,
+    ratio: 0,
+    chance: 1,
+    turns: 0,
+    cooldown: 0,
+    cost: 0,
+    kind: 'physical',
+    stat: '',
+    cleanse: false,
+    desc: '不消耗法力的物理攻击。法力不够时也能用。',
+  };
+}
+
 export function getMove(id: string): MoveDef {
+  if (id === 'basic-strike') return basicStrike('yangmu');
   return SKILLS[LEGACY[id] ?? id] ?? SKILLS['yangmu-basic-attack-0'];
 }
 

@@ -392,6 +392,9 @@ export class Game implements GameHost {
       case 'battle-move':
         this.doMove(Number(arg ?? 0));
         return;
+      case 'battle-basic':
+        this.doMove(-1);
+        return;
       case 'battle-catch':
         this.beginCapture('battle');
         return;

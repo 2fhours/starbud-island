@@ -41,6 +41,15 @@ export type SpeciesId =
   | 'xiwen';
 
 export type MoveId = string;
+export type AttackKind = 'physical' | 'magic';
+
+export interface Five {
+  con: number;
+  str: number;
+  int: number;
+  spi: number;
+  spd: number;
+}
 
 export type Dir = 'down' | 'up' | 'left' | 'right';
 export type Timing = 'perfect' | 'good' | 'close' | 'miss';
@@ -58,6 +67,8 @@ export interface MoveDef {
   chance: number;
   turns: number;
   cooldown: number;
+  cost: number;
+  kind: AttackKind | '';
   stat: 'atk' | 'def' | 'spd' | '';
   cleanse: boolean;
   desc: string;
@@ -69,7 +80,7 @@ export interface SpeciesDef {
   type: TypeId;
   catchRate: number;
   baseExp: number;
-  bases: { hp: number; atk: number; def: number; spd: number };
+  race: Five;
   moves: [string, string];
   blurb: string;
   dex: string;
@@ -92,6 +103,8 @@ export interface Mon {
   level: number;
   exp: number;
   hp: number;
+  mp: number;
+  ivs: Five;
   stages: { atk: number; def: number; spd: number };
   aspect?: TypeId;
   moves?: string[];

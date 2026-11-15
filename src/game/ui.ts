@@ -1,7 +1,7 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
-import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, questObjectives } from './logic';
+import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives } from './logic';
 import { SKILL_LIST, getMove, skillStats } from './skills';
 import type { Input } from './input';
 import type { MoveCat, PlayState, SpeciesId, TypeId } from './types';
@@ -141,12 +141,36 @@ function titleSheet(host: GameHost, confirm: boolean): string {
   return shell('<p class="eyebrow">原创芽灵小岛</p><h1>星芽岛</h1>', `<p class="lead">在明亮的岛上散步，认识会自己走动的芽灵。邀请它们同行，或友好地比试一场。</p><p class="fine">${host.saveExists ? esc(host.saveSummaryText) : '还没有旅程记录'}</p><p class="fine">进度只写在这台设备里。2.5D 和 3D 只是预览，不改这趟旅程的存档。</p>`, `<div class="stack"><button class="btn leaf" data-act="new-game">开始新旅程</button><button class="btn" data-act="continue" ${host.saveExists ? '' : 'disabled'}>继续旅程</button><a class="btn secondary" href="./iso.html">2.5D 预览</a><a class="btn secondary" href="./view3d.html">3D 预览</a><button class="texty" data-act="ask-reset">清除存档</button></div>`, 'title-sheet');
 }
 
+function petStats(mon: PlayState['team'][number]): string {
+  const view = profile(mon);
+  const pct = (value: number) => `${Math.round(value * 100)}%`;
+  const cores: Array<[string, number]> = [
+    ['体质', view.core.con],
+    ['力量', view.core.str],
+    ['智力', view.core.int],
+    ['精神', view.core.spi],
+    ['速度', view.core.spd],
+  ];
+  const derived: Array<[string, string | number]> = [
+    ['生命', view.maxHp],
+    ['法力', view.maxMp],
+    ['物攻', view.physAtk],
+    ['物防', view.physDef],
+    ['魔攻', view.magAtk],
+    ['魔防', view.magDef],
+    ['命中', pct(view.hit)],
+    ['闪避', pct(view.evasion)],
+    ['出手', view.action],
+  ];
+  return `<div class="pet-stats"><p class="core-row">${cores.map(([label, value]) => `<span><b>${label}</b> ${value}</span>`).join('')}</p><p class="derived-row">${derived.map(([label, value]) => `<span>${label} ${value}</span>`).join('')}</p><p class="fine">体质提高生命和物防。力量提高物攻和物防。智力提高魔攻和魔防。精神提高法力、魔防和命中。速度提高出手、闪避和命中。这和五行属性是两套数。</p></div>`;
+}
+
 function teamSheet(play: PlayState): string {
   const cards = play.team.map((mon, index) => {
     const species = getSpecies(mon.speciesId);
     const max = maxHp(mon);
     const names = (mon.moves ?? []).map((id) => esc(getMove(id).name)).join(' · ');
-    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0)}<div><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
+    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0)}<div><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
     ? play.box.map((mon) => `<span>${esc(getSpecies(mon.speciesId).name)} ${mon.level}级</span>`).join('、')
@@ -176,7 +200,8 @@ function battleSheet(host: GameHost): string {
   const moves = (mine.moves ?? []).map((id, index) => {
     const move = getMove(id);
     const cooling = (mineState?.cd[id] ?? 0) > 0;
-    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
+    const broke = (mine.mp ?? 0) < move.cost;
+    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling && !broke ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${move.cost > 0 ? ` ·${move.cost}` : ''}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
   }).join('');
   const switches = battle.player.map((mon, index) => {
     const name = getSpecies(mon.speciesId).name;
@@ -186,7 +211,7 @@ function battleSheet(host: GameHost): string {
   const actions = host.mustSwitch
     ? `<p>选择还能战斗的伙伴。</p><div class="party">${switches}</div>`
     : host.canAct
-      ? `<div class="moves">${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
+      ? `<div class="moves"><button class="btn secondary" data-act="battle-basic" ${host.canAct ? '' : 'disabled'}>普通攻击</button>${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<p class="auto-note">回合自动继续</p>`;
   const foeAspect = aspectOf(foe);
   const myAspect = aspectOf(mine);
@@ -196,7 +221,7 @@ function battleSheet(host: GameHost): string {
     foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
     foeState?.rootTurns ? '定身' : '',
   ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}</div></div>`;
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage')}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0)}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 

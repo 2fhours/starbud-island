@@ -431,7 +431,11 @@ body:not([data-mode="explore"]) .build-tag {
 }
 .title-dim { align-items: flex-end; background: linear-gradient(180deg, rgba(48,28,18,0.02), rgba(48,28,18,0.28)); }
 .mon-list { display: flex; flex-direction: column; gap: 8px; }
-.mon-card { display: grid; grid-template-columns: 72px minmax(0, 1fr); text-align: left; gap: 8px; align-items: center; }
+.mon-card { display: grid; grid-template-columns: 72px minmax(0, 1fr); text-align: left; gap: 8px; align-items: start; }
+.pet-stats { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.core-row, .derived-row { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 2px 0; }
+.core-row span, .derived-row span { font-size: 12px; line-height: 1.35; }
+.pet-stats .fine { margin: 0; }
 .check { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .check.done { color: var(--leaf); }
 .unknown { filter: grayscale(1); opacity: 0.45; }
