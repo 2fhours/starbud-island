@@ -1,6 +1,7 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
+import { evolutionStatus, ITEM_LABEL } from './evolution';
 import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
@@ -127,7 +128,8 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   } else if (mode === 'dex' && host.play) {
     inner = dexSheet(host.play);
   } else if (mode === 'bag' && host.play) {
-    inner = shell('<h2>背包</h2>', `<p><strong>星芽球 × ${host.play.balls}</strong></p><p>邀请芽灵同行时消耗。光环越接近绿色目标圈，成功率越高。少于 8 个时，在星芽驿休息会补到 8 个。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+    const items = host.play.items;
+    inner = shell('<h2>背包</h2>', `<p><strong>星芽球 × ${host.play.balls}</strong></p><p>邀请芽灵同行时消耗。光环越接近绿色目标圈，成功率越高。少于 8 个时，在星芽驿休息会补到 8 个。</p><p><strong>${ITEM_LABEL.yanxinshi} × ${items.yanxinshi}</strong></p><p>火纹狐进化成炽焰狐时消耗 1 个。战胜或收服野生焰尾狐会得到 1 个。星芽岛南坡的余烬暖岩也能采集，拿走后再走 40 步会重新结出。</p><p><strong>${ITEM_LABEL.qingfengling} × ${items.qingfengling}</strong></p><p>铃羽鸟进化成瑶铃鸟时消耗 1 个。战胜或收服野生风铃鸟会得到 1 个。试炼林东侧的铃风枝也能采集，拿走后再走 40 步会重新结出。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
   } else if (mode === 'quest' && host.play) {
     const items = questObjectives(host.play.quest);
     const ridge = host.play.quest.completed || host.play.mapId === 'ridge'
@@ -196,7 +198,9 @@ function teamSheet(play: PlayState): string {
       const move = getMove(id);
       return `${esc(move.name)} ${skillFormLabel(move)}`;
     }).join(' · ');
-    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
+    const evo = evolutionStatus(mon, play, (id) => getSpecies(id).name);
+    const evolveButton = evo.ready ? `<button class="btn tiny leaf" data-act="evolve" data-arg="${index}">进化</button>` : '';
+    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><p class="evo">${esc(evo.line)}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${evolveButton}${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
     ? play.box.map((mon) => `<span>${esc(getSpecies(mon.speciesId).name)} ${mon.level}级</span>`).join('、')

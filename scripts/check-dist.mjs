@@ -22,7 +22,7 @@ for (const id of portraits) {
   const file = new URL(`../dist/portraits/${id}.jpg`, import.meta.url);
   if (!fs.existsSync(file)) throw new Error(`dist 缺少立绘 portraits/${id}.jpg`);
 }
-const facings = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'wudeng', 'yunyang', 'luoxing', 'hanquan'];
+const facings = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'wudeng', 'yunyang', 'luoxing', 'hanquan', 'cuizhi', 'senmian', 'huowen', 'chiyan', 'linlu', 'jinglu', 'shanrong', 'tingrong', 'panjia', 'lingyu', 'yaoling', 'senbei', 'chaowen', 'canglan', 'wuhui', 'landeng', 'lanjiao', 'xingyi', 'liuxing', 'shuangquan'];
 for (const id of facings) {
   for (const side of ['front', 'back']) {
     const file = new URL(`../dist/portraits/${id}-${side}.jpg`, import.meta.url);

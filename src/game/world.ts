@@ -67,6 +67,16 @@ export interface PickupDef {
   balls: number;
 }
 
+export interface GatherDef {
+  id: 'ember-rock' | 'bell-branch';
+  x: number;
+  y: number;
+  item: 'yanxinshi' | 'qingfengling';
+  name: string;
+  got: string;
+  waiting: string;
+}
+
 export interface SignDef {
   id: string;
   x: number;
@@ -86,6 +96,7 @@ export interface World {
   spawns: SpawnDef[];
   npcs: NpcDef[];
   pickups: PickupDef[];
+  gathers: GatherDef[];
   signs: SignDef[];
   gates: GateDef[];
   door: { x: number; y: number };
@@ -250,7 +261,7 @@ export function createWorld(): World {
       for (let dx = -3; dx <= 3; dx += 1) {
         const tx = x + dx;
         const ty = y + dy;
-        if (!isWalkable({ id: 'island', name: '星芽岛', cols: COLS, rows: ROWS, tiles, solid, props, spawns: [], npcs: [], pickups: [], signs: [], gates: [], door, spawnTile: { x: 0, y: 0 }, bossTile: { x: 0, y: 0 } }, tx, ty)) {
+        if (!isWalkable({ id: 'island', name: '星芽岛', cols: COLS, rows: ROWS, tiles, solid, props, spawns: [], npcs: [], pickups: [], gathers: [], signs: [], gates: [], door, spawnTile: { x: 0, y: 0 }, bossTile: { x: 0, y: 0 } }, tx, ty)) {
           if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
           if (tiles[ty][tx] === Tile.Water || tiles[ty][tx] === Tile.Deep || solid[ty][tx]) continue;
         }
@@ -306,6 +317,24 @@ export function createWorld(): World {
     { id: 'balls-forest', ...claim(9, 13, Tile.Tall), balls: 3 },
     { id: 'balls-lake', ...claim(30, 21, Tile.Tall), balls: 3 },
   ];
+  const gathers: GatherDef[] = [
+    {
+      id: 'ember-rock',
+      ...claim(15, 26, Tile.Sand),
+      item: 'yanxinshi',
+      name: '余烬暖岩',
+      got: '暖岩结出 1 个焰心石',
+      waiting: '暖岩还没再结出焰心石，再走一段路吧',
+    },
+    {
+      id: 'bell-branch',
+      ...claim(24, 11, Tile.Grass),
+      item: 'qingfengling',
+      name: '铃风枝',
+      got: '枝头落下 1 个清风铃',
+      waiting: '铃风枝还是空的，再走一段路吧',
+    },
+  ];
   const signs: SignDef[] = [
     { id: 'shrine', ...claim(17, 15, Tile.Plaza), title: '星芽驿', text: '治疗与补给都在这里。站到门前按交谈，就能让伙伴休息。' },
     { id: 'north', ...claim(23, 10, Tile.Grass), title: '指路牌', text: '往北是试炼林，岚川在林间空地等着。' },
@@ -350,6 +379,8 @@ export function createWorld(): World {
       }
     }
   }
+
+  for (const node of gathers) solid[node.y][node.x] = false;
 
   const north = columnEdge(tiles, solid, 20, 'north');
   const south = columnEdge(tiles, solid, 20, 'south');
@@ -396,6 +427,7 @@ export function createWorld(): World {
     spawns,
     npcs,
     pickups,
+    gathers,
     signs,
     gates,
     door,
@@ -556,6 +588,7 @@ export function createRidge(): World {
     spawns,
     npcs,
     pickups,
+    gathers: [],
     signs,
     gates,
     door: { x: 20, y: 23 },

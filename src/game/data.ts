@@ -1,4 +1,5 @@
 import { effectiveness, TYPE_META } from './elements';
+import { CATCH_FLOOR, CATCH_STEP, EXP_STEP, EVOLUTION_LINES, raceAtStage } from './evolution';
 import { getMove } from './skills';
 import type { SpeciesDef, SpeciesId, TypeId } from './types';
 
@@ -139,6 +140,56 @@ const SPECIES_LIST_RAW: SpeciesDef[] = [
   },
 ];
 
+const EVO_COPY: Partial<Record<SpeciesId, { name: string; blurb: string; dex: string }>> = {
+  cuizhi: { name: '翠枝鹿', blurb: '尾尖多了一小簇叶子。', dex: '叶角鹿长大后的样子。叶片更密，走在草坡上时尾巴会轻轻摇。' },
+  senmian: { name: '森冕鹿', blurb: '角枝连成一圈小叶冠。', dex: '翠枝鹿的最终形态。叶冠上点着细小的白花蕾，仍然温顺。' },
+  huowen: { name: '火纹狐', blurb: '尾巴是内黄外橙的两层火焰。', dex: '焰尾狐长高之后的样子。腿更长，颈上还没有焰鬣。' },
+  chiyan: { name: '炽焰狐', blurb: '颈到肩披着一圈柔和焰鬣。', dex: '火纹狐的最终形态。焰鬣是它和前一形态的差别，笑起来仍然温和。' },
+  linlu: { name: '霖露蛙', blurb: '头顶顶着三颗露珠。', dex: '露珠蛙长大后的样子。头上是一大两小的露珠，和基础形态的单珠不同。' },
+  jinglu: { name: '晶露蛙', blurb: '肩背上结着一簇晶露。', dex: '霖露蛙的最终形态。身体更壮，蹼足更宽，头上仍是三珠小冠。' },
+  shanrong: { name: '闪绒鼠', blurb: '头顶的闪电撮又高了一截。', dex: '电绒鼠长大后的样子。尾巴略长，带着细细的电光锯齿。' },
+  tingrong: { name: '霆绒鼠', blurb: '头顶是一顶三叉闪电冠。', dex: '闪绒鼠的最终形态。仍是圆绒鼠，闪电冠在正背都能看见。' },
+  panjia: { name: '磐甲龟', blurb: '壳更厚，缝里长着小蕨芽。', dex: '岩壳龟的最终形态。甲壳分层，四肢更粗，脸上还是笑的。' },
+  lingyu: { name: '铃羽鸟', blurb: '尾上挂着一大一小两枚金铃。', dex: '风铃鸟长大后的样子。粉冠更丰，两枚金铃正背都能数到。' },
+  yaoling: { name: '瑶铃鸟', blurb: '粉冠更高，金铃成串。', dex: '铃羽鸟的最终形态。仍是小鸟，金铃是两枚成串，不是凤凰。' },
+  senbei: { name: '森背熊', blurb: '背上的青苔开出了小白花。', dex: '苔背熊的最终形态。更大，仍然圆滚站着，背上有小叶和小花。' },
+  chaowen: { name: '潮纹獭', blurb: '身侧的蓝纹多了好几道。', dex: '汐纹獭长大后的样子。尾巴更长，蓝色的范围也更大。' },
+  canglan: { name: '沧澜獭', blurb: '尾巴像一道带碎光的浪。', dex: '潮纹獭的最终形态。浪形尾巴上有水光，不是海怪。' },
+  wuhui: { name: '雾辉蛾', blurb: '四翅伸长，里面亮着小灯笼。', dex: '雾灯蛾长大后的样子。翅内的暖黄灯笼正背都能看见。' },
+  landeng: { name: '岚灯蛾', blurb: '层叠的灯纱翅又宽又透。', dex: '雾辉蛾的最终形态。翅上不再嵌灯笼，腹前的灯芯正背都亮着。' },
+  lanjiao: { name: '岚角羊', blurb: '弯角更长，角上沾着细石。', dex: '云岩羊的最终形态。卷毛更厚，四肢略高，仍然是山羊。' },
+  xingyi: { name: '星翼鼯', blurb: '翼膜半垂，尾巴又长又软。', dex: '落星鼯长大后的样子。落地站着，尾上仍是一颗星。' },
+  liuxing: { name: '流星鼯', blurb: '膜翼腹面画着星图。', dex: '星翼鼯的最终形态。星图在翼的腹面，尾上仍是一颗星。' },
+  shuangquan: { name: '霜泉鲵', blurb: '尾鳍带一圈霜白边。', dex: '寒泉鲵的最终形态。鳃羽更软，背上有淡淡霜斑。' },
+};
+
+function evolvedSpecies(): SpeciesDef[] {
+  const bases = Object.fromEntries(SPECIES_LIST_RAW.map((species) => [species.id, species])) as Record<SpeciesId, SpeciesDef>;
+  const list: SpeciesDef[] = [];
+  for (const line of EVOLUTION_LINES) {
+    const base = bases[line[0].id];
+    for (const step of line) {
+      if (step.stage === 1) continue;
+      const copy = EVO_COPY[step.id];
+      if (!copy) throw new Error(`缺少进化文案 ${step.id}`);
+      const steps = step.stage - 1;
+      list.push({
+        id: step.id,
+        name: copy.name,
+        type: base.type,
+        catchRate: Math.max(CATCH_FLOOR, base.catchRate - steps * CATCH_STEP),
+        baseExp: base.baseExp + steps * EXP_STEP,
+        race: raceAtStage(base.race, step.stage),
+        moves: base.moves,
+        blurb: copy.blurb,
+        dex: copy.dex,
+      });
+    }
+  }
+  return list;
+}
+
+export const BASE_SPECIES: SpeciesId[] = SPECIES_LIST_RAW.map((species) => species.id);
 export const RIDGE_SPECIES: SpeciesId[] = ['wudeng', 'yunyang', 'luoxing', 'hanquan'];
 export const RIDGE_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
   { speciesId: 'wudeng', level: 13 },
@@ -146,7 +197,7 @@ export const RIDGE_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
   { speciesId: 'luoxing', level: 13 },
 ];
 
-export const SPECIES_LIST = SPECIES_LIST_RAW;
+export const SPECIES_LIST = [...SPECIES_LIST_RAW, ...evolvedSpecies()];
 
 const SPECIES_MAP = Object.fromEntries(SPECIES_LIST.map((species) => [species.id, species])) as Record<SpeciesId, SpeciesDef>;
 

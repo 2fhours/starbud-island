@@ -32,19 +32,45 @@ export type MoveEffect =
 
 export type SpeciesId =
   | 'lujiao'
+  | 'cuizhi'
+  | 'senmian'
   | 'yanwei'
+  | 'huowen'
+  | 'chiyan'
   | 'luzhu'
+  | 'linlu'
+  | 'jinglu'
   | 'dianrong'
+  | 'shanrong'
+  | 'tingrong'
   | 'yanke'
+  | 'panjia'
   | 'fengling'
+  | 'lingyu'
+  | 'yaoling'
   | 'taibei'
+  | 'senbei'
   | 'xiwen'
+  | 'chaowen'
+  | 'canglan'
   | 'wudeng'
+  | 'wuhui'
+  | 'landeng'
   | 'yunyang'
+  | 'lanjiao'
   | 'luoxing'
-  | 'hanquan';
+  | 'xingyi'
+  | 'liuxing'
+  | 'hanquan'
+  | 'shuangquan';
 
 export type MapId = 'island' | 'ridge';
+export type ItemId = 'yanxinshi' | 'qingfengling';
+
+export interface ItemBag {
+  yanxinshi: number;
+  qingfengling: number;
+}
 
 export type MoveId = string;
 export type AttackKind = 'physical' | 'magic';
@@ -148,6 +174,9 @@ export interface PlayState {
   box: Mon[];
   dex: Record<SpeciesId, { seen: boolean; caught: boolean }>;
   balls: number;
+  items: ItemBag;
+  steps: number;
+  gather: Record<string, number>;
   quest: QuestFlags;
   ridgeQuest: RidgeQuest;
   pickups: string[];
@@ -160,7 +189,7 @@ export const MUTE_KEY = 'xingya-island-mute';
 export const MUSIC_ON_KEY = 'xingya-island-music';
 export const MUSIC_VOL_KEY = 'xingya-island-music-volume';
 export const DRAG_HINT_KEY = 'xingya-island-drag-hint';
-export const MAX_LEVEL = 30;
+export const MAX_LEVEL = 40;
 export const TEAM_LIMIT = 6;
 export const BALL_TOP_UP = 8;
 export const START_BALLS = 12;

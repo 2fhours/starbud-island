@@ -1,8 +1,9 @@
 import { TYPE_META, relate } from './elements';
 import { getMove, skillForm, skillsOf } from './skills';
-import { getSpecies } from './data';
+import { getSpecies, SPECIES_LIST } from './data';
+import { evolutionStatus } from './evolution';
 import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
-import type { Fighter, Five, Mon, MoveCat, MoveDef, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
+import type { Fighter, Five, Mon, MoveCat, MoveDef, PlayState, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
 import { BALL_TOP_UP, LOADOUT_LIMIT, MAX_LEVEL, TEAM_LIMIT, TIER_LEVEL } from './types';
 
 let uidSeq = 1;
@@ -484,20 +485,31 @@ export function grandmaFollowup(quest: QuestFlags): string[] {
 }
 
 export function emptyDex(): Record<SpeciesId, { seen: boolean; caught: boolean }> {
-  return {
-    lujiao: { seen: false, caught: false },
-    yanwei: { seen: false, caught: false },
-    luzhu: { seen: false, caught: false },
-    dianrong: { seen: false, caught: false },
-    yanke: { seen: false, caught: false },
-    fengling: { seen: false, caught: false },
-    taibei: { seen: false, caught: false },
-    xiwen: { seen: false, caught: false },
-    wudeng: { seen: false, caught: false },
-    yunyang: { seen: false, caught: false },
-    luoxing: { seen: false, caught: false },
-    hanquan: { seen: false, caught: false },
-  };
+  const dex = {} as Record<SpeciesId, { seen: boolean; caught: boolean }>;
+  for (const species of SPECIES_LIST) dex[species.id] = { seen: false, caught: false };
+  return dex;
+}
+
+export function commitEvolution(mon: Mon, play: PlayState): { ok: boolean; text: string } {
+  const before = getSpecies(mon.speciesId);
+  const status = evolutionStatus(mon, play, (id) => getSpecies(id).name);
+  if (!status.ready || !status.to) return { ok: false, text: status.line };
+  if (status.item && (play.items[status.item] ?? 0) < 1) return { ok: false, text: status.line };
+  const oldHp = maxHp(mon);
+  const oldMp = maxMp(mon);
+  const hp = mon.hp;
+  const mp = mon.mp ?? 0;
+  const fainted = hp <= 0;
+  if (status.item) play.items[status.item] -= 1;
+  mon.speciesId = status.to;
+  ensureLoadout(mon);
+  const newHp = maxHp(mon);
+  const newMp = maxMp(mon);
+  if (fainted) mon.hp = 0;
+  else mon.hp = clamp(oldHp > 0 ? Math.round((hp * newHp) / oldHp) : hp, 1, newHp);
+  mon.mp = clamp(oldMp > 0 ? Math.round((mp * newMp) / oldMp) : mp, 0, newMp);
+  play.dex[status.to] = { seen: true, caught: true };
+  return { ok: true, text: `${before.name}进化成了${getSpecies(status.to).name}` };
 }
 
 export function ridgeObjectives(quest: RidgeQuest): Array<{ title: string; done: boolean }> {

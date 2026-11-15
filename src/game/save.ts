@@ -1,23 +1,41 @@
 import { getSpecies, SPECIES_LIST } from './data';
 import { emptyDex, ensureLoadout, maxHp, maxMp } from './logic';
 import { convertLegacyHp, ivFromUid, legacyMaxHp, validIvs } from './stats';
-import type { Dir, Five, MapId, Mon, PlayState, SpeciesId, TypeId } from './types';
-import { SAVE_KEY } from './types';
+import type { Dir, Five, ItemBag, MapId, Mon, PlayState, SpeciesId, TypeId } from './types';
+import { MAX_LEVEL, SAVE_KEY } from './types';
 import { TYPE_META } from './elements';
 import { canWalkPixel, tileCenter, worldFor } from './world';
 
 const DIRS = new Set<Dir>(['down', 'up', 'left', 'right']);
 const SPECIES = new Set<SpeciesId>(SPECIES_LIST.map((species) => species.id));
 
+function countOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function readItems(value: unknown): ItemBag {
+  const raw = value && typeof value === 'object' ? value as Partial<ItemBag> : {};
+  return { yanxinshi: countOf(raw.yanxinshi), qingfengling: countOf(raw.qingfengling) };
+}
+
+function readGather(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object') return {};
+  const gather: Record<string, number> = {};
+  for (const [key, count] of Object.entries(value as Record<string, unknown>)) {
+    if (key === 'ember-rock' || key === 'bell-branch') gather[key] = countOf(count);
+  }
+  return gather;
+}
+
 function asMon(value: unknown): Mon | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<Mon>;
   if (typeof raw.speciesId !== 'string' || !SPECIES.has(raw.speciesId as SpeciesId)) return null;
-  if (typeof raw.level !== 'number' || raw.level < 1 || raw.level > 30) return null;
+  if (typeof raw.level !== 'number' || !Number.isFinite(raw.level)) return null;
   const speciesId = raw.speciesId as SpeciesId;
   const aspect = typeof raw.aspect === 'string' && raw.aspect in TYPE_META ? raw.aspect as TypeId : getSpecies(speciesId).type;
   const uid = typeof raw.uid === 'string' ? raw.uid : 'restored';
-  const level = Math.floor(raw.level);
+  const level = Math.min(MAX_LEVEL, Math.max(1, Math.floor(raw.level)));
   let migrated = false;
   let ivs: Five;
   if (validIvs(raw.ivs)) {
@@ -59,9 +77,9 @@ export function deserialize(raw: string | null): PlayState | null {
     if (typeof play.x !== 'number' || typeof play.y !== 'number') return null;
     if (!DIRS.has(play.dir)) return null;
     if (!Array.isArray(play.team) || play.team.length < 1) return null;
-    const team = play.team.map(asMon);
-    const box = Array.isArray(play.box) ? play.box.map(asMon) : [];
-    if (team.some((mon) => !mon) || box.some((mon) => !mon)) return null;
+    const team = play.team.map(asMon).filter((mon): mon is Mon => !!mon);
+    const box = Array.isArray(play.box) ? play.box.map(asMon).filter((mon): mon is Mon => !!mon) : [];
+    if (team.length < 1) return null;
     const dex = emptyDex();
     for (const id of SPECIES) {
       const entry = play.dex?.[id];
@@ -85,10 +103,13 @@ export function deserialize(raw: string | null): PlayState | null {
       y,
       dir: play.dir,
       mapId,
-      team: team as Mon[],
-      box: box as Mon[],
+      team,
+      box,
       dex,
       balls: typeof play.balls === 'number' ? Math.max(0, Math.floor(play.balls)) : 0,
+      items: readItems(play.items),
+      steps: countOf(play.steps),
+      gather: readGather(play.gather),
       quest: {
         introduced: !!play.quest?.introduced,
         caughtWild: !!play.quest?.caughtWild,

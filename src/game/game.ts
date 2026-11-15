@@ -5,6 +5,7 @@ import { Input } from './input';
 import {
   catchProbability,
   cloneMon,
+  commitEvolution,
   emptyDex,
   expGain,
   fleeChance,
@@ -23,6 +24,7 @@ import {
   toggleEquip,
   topUpBalls,
 } from './logic';
+import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
   drawBall,
@@ -139,6 +141,8 @@ export class Game implements GameHost {
   private logPaused = false;
   private dragPointer: number | null = null;
   private saveTimer = 0;
+  private stepTile: { x: number; y: number } | null = null;
+  private gatherNotice = '';
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
   private talkLockId = '';
@@ -366,6 +370,17 @@ export class Game implements GameHost {
           this.persist(true);
         }
         break;
+      case 'evolve':
+        if (this.mode !== 'team' || !this.play || !arg) break;
+        {
+          const mon = this.play.team[Number(arg)];
+          if (!mon) break;
+          const result = commitEvolution(mon, this.play);
+          this.toast(result.text);
+          if (result.ok) this.audio.play('level');
+          this.persist(true);
+        }
+        break;
       case 'skill-type':
         this.skillType = arg || 'all';
         break;
@@ -458,6 +473,7 @@ export class Game implements GameHost {
     if (this.mode === 'explore' && this.play) {
       this.movePlayer(dt);
       this.collectPickups();
+      this.collectGathers();
       this.nearby = this.findNearby();
       this.nearbyLabel = this.nearby ? this.nearbyText(this.nearby) : null;
       if (this.input.consumeInteract()) this.interact();
@@ -495,6 +511,7 @@ export class Game implements GameHost {
     } else if (canWalkPixel(this.world, this.play.x + dx, this.play.y)) this.play.x += dx;
     else if (canWalkPixel(this.world, this.play.x, this.play.y + dy)) this.play.y += dy;
     this.moving = true;
+    this.noteStep();
     const dir: Dir = Math.abs(axis.x) > Math.abs(axis.y) ? (axis.x < 0 ? 'left' : 'right') : axis.y < 0 ? 'up' : 'down';
     this.play.dir = dir;
     this.hist.push({ x: this.play.x, y: this.play.y });
@@ -612,6 +629,21 @@ export class Game implements GameHost {
         const sy = (pickup.y + 1) * TILE - this.camY;
         sprites.push({ y: (pickup.y + 0.8) * TILE, draw: () => drawBall(this.ctx, sx, sy, this.time) });
       }
+    }
+    for (const node of this.world.gathers) {
+      const sx = (node.x + 0.5) * TILE - this.camX;
+      const sy = (node.y + 1) * TILE - this.camY;
+      const ready = !this.play || this.play.steps >= (this.play.gather[node.id] ?? 0);
+      sprites.push({
+        y: (node.y + 0.8) * TILE,
+        draw: () => {
+          if (node.item === 'yanxinshi') drawRock(this.ctx, sx, sy - 8, ready ? 1 : 0);
+          else drawFlower(this.ctx, sx, sy - 6, ready ? 2 : 0, this.time);
+          if (this.play && Math.hypot(this.play.x - (node.x + 0.5) * TILE, this.play.y - (node.y + 0.5) * TILE) < 72) {
+            drawLabel(this.ctx, node.name, sx, sy - 36);
+          }
+        },
+      });
     }
     for (const gate of this.world.gates) {
       const open = !!this.play && gateChoice(this.play.quest.completed, gate) === 'go';
@@ -743,6 +775,9 @@ export class Game implements GameHost {
       box: [],
       dex,
       balls: START_BALLS,
+      items: emptyItems(),
+      steps: 0,
+      gather: {},
       quest: { introduced: false, caughtWild: false, bossDefeated: false, completed: false },
       pickups: [],
       mapId: 'island',
@@ -994,9 +1029,11 @@ export class Game implements GameHost {
         const where = receiveMon(this.play.team, this.play.box, cloneMon(mon));
         this.markCaught(mon.speciesId);
         this.noteCatch();
+        const trophy = wild ? this.awardWildItem(wild.speciesId) : '';
         if (wild) this.retireWild(wild);
         const logs = [`${timingLabel(timing)}，${percent}`, ...resolveCatch(this.battle, true, () => this.rng())];
         logs.push(where === 'team' ? `${name}加入了队伍` : `队伍满了，${name}寄存在星芽驿`);
+        if (trophy) logs.push(trophy);
         this.mode = 'battle';
         this.burst(this.play.x, this.play.y - 20, ['#f0b429', '#fff', '#2f9a5a']);
         this.beginLogs(logs, () => this.finishBattle());
@@ -1023,8 +1060,10 @@ export class Game implements GameHost {
       const where = receiveMon(this.play.team, this.play.box, cloneMon(mon));
       this.markCaught(mon.speciesId);
       this.noteCatch();
+      const trophy = this.awardWildItem(mon.speciesId);
       const lead = this.play.team.find((member) => member.uid === this.play!.team[0].uid) ?? this.play.team[0];
       lines.push(`收服了${name}！`, where === 'team' ? '它加入了队伍。' : '队伍已满，先寄存在星芽驿。', ...grantExp(lead, expGain(mon.level, getSpecies(mon.speciesId).baseExp, false)));
+      if (trophy) lines.push(trophy);
       if (wild) this.retireWild(wild);
       this.burst(this.play.x, this.play.y - 24, ['#f0b429', '#fff8ef', '#2f9a5a']);
       this.openDialogue('捕捉', lines, () => this.persist(false));
@@ -1088,7 +1127,10 @@ export class Game implements GameHost {
     if (battle.kind === 'trainer' && battle.result === 'win') line = this.applyTrainerReward(battle.trainerName);
     else if (battle.result === 'catch') line = '新的伙伴和你一起走了。';
     else if (battle.result === 'run') line = '你们先离开了。野生芽灵还留在原地。';
-    else if (battle.result === 'win') line = '野生芽灵退开了。';
+    else if (battle.result === 'win') {
+      const trophy = wild ? this.awardWildItem(wild.speciesId) : '';
+      line = trophy ? `野生芽灵退开了。${trophy}` : '野生芽灵退开了。';
+    }
     this.battle = null;
     this.trainerKey = null;
     this.openDialogue('对战', [line], () => this.persist(false));
@@ -1175,6 +1217,46 @@ export class Game implements GameHost {
     wild.y = wild.homeY;
     wild.mon = makeMon(wild.speciesId, wild.level);
     wild.ignoreUntil = 0;
+  }
+
+  private noteStep(): void {
+    if (!this.play) return;
+    const x = Math.floor(this.play.x / TILE);
+    const y = Math.floor(this.play.y / TILE);
+    if (this.stepTile && (this.stepTile.x !== x || this.stepTile.y !== y)) this.play.steps += 1;
+    this.stepTile = { x, y };
+  }
+
+  private awardWildItem(speciesId: SpeciesId): string {
+    const item = itemFromWild(speciesId);
+    if (!item || !this.play) return '';
+    this.play.items[item] += 1;
+    return `得到 1 个${ITEM_LABEL[item]}。`;
+  }
+
+  private collectGathers(): void {
+    if (!this.play) return;
+    let near = '';
+    for (const node of this.world.gathers) {
+      const center = tileCenter(node.x, node.y);
+      if (Math.hypot(this.play.x - center.x, this.play.y - center.y) >= 30) continue;
+      near = node.id;
+      const readyAt = this.play.gather[node.id] ?? 0;
+      if (this.play.steps < readyAt) {
+        if (this.gatherNotice !== node.id) {
+          this.gatherNotice = node.id;
+          this.toast(node.waiting);
+        }
+        continue;
+      }
+      this.play.items[node.item] += 1;
+      this.play.gather[node.id] = this.play.steps + GATHER_STEPS;
+      this.gatherNotice = node.id;
+      this.toast(node.got);
+      this.audio.play('tap');
+      this.persist(true);
+    }
+    if (!near) this.gatherNotice = '';
   }
 
   private collectPickups(): void {

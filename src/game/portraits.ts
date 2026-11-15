@@ -25,7 +25,7 @@ export type ActorId = 'player' | 'grandma' | 'qinghe' | 'lanchuan' | 'wushou' | 
 export type SpeciesPortraitFit = 'stage' | 'card' | 'detail';
 export type PortraitFacing = 'front' | 'back';
 
-export const SPECIES_PORTRAIT_IDS = [
+export const FULL_BODY_SPECIES = [
   'lujiao',
   'yanwei',
   'luzhu',
@@ -38,6 +38,30 @@ export const SPECIES_PORTRAIT_IDS = [
   'yunyang',
   'luoxing',
   'hanquan',
+] as const satisfies readonly SpeciesId[];
+
+export const SPECIES_PORTRAIT_IDS = [
+  ...FULL_BODY_SPECIES,
+  'cuizhi',
+  'senmian',
+  'huowen',
+  'chiyan',
+  'linlu',
+  'jinglu',
+  'shanrong',
+  'tingrong',
+  'panjia',
+  'lingyu',
+  'yaoling',
+  'senbei',
+  'chaowen',
+  'canglan',
+  'wuhui',
+  'landeng',
+  'lanjiao',
+  'xingyi',
+  'liuxing',
+  'shuangquan',
 ] as const satisfies readonly SpeciesId[];
 
 const FACINGS = ['front', 'back'] as const satisfies readonly PortraitFacing[];

@@ -1,4 +1,5 @@
 import { getSpecies, TYPE_META } from './data';
+import { familyBase } from './evolution';
 import type { Dir, SpeciesId } from './types';
 import { TILE, hash } from './world';
 
@@ -697,7 +698,7 @@ export function drawCreature(
   if (faint) ctx.filter = 'grayscale(0.85) brightness(0.92)';
   shadow(ctx, 0, 2, 16, 6);
   try {
-    drawSpecies(ctx, id, time);
+    drawSpecies(ctx, familyBase(id), time);
   } catch {
     orb(ctx, 0, -16, 12, 10, '#ffe7c8', '#e7b184');
   }

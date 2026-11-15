@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { APP_VERSION } from '../version';
-import { SPECIES_LIST } from './data';
-import { actorFor, actorPortraitHtml, battleFacing, PORTRAIT_FILES, portraitSrc, SPECIES_PORTRAIT_IDS, speciesFacingFile, speciesFacingSrc, speciesPortraitHtml } from './portraits';
+import { actorFor, actorPortraitHtml, battleFacing, FULL_BODY_SPECIES, PORTRAIT_FILES, portraitSrc, SPECIES_PORTRAIT_IDS, speciesFacingFile, speciesFacingSrc, speciesPortraitHtml } from './portraits';
 import { canvasBitmapSize, MAX_CANVAS_EDGE, PORTRAIT_CSS } from './sprites';
 import { createWorld } from './world';
 
@@ -36,9 +35,9 @@ describe('静态立绘', () => {
     }
   });
 
-  it('八种芽灵和三位居民都有对应文件', () => {
-    for (const species of SPECIES_LIST) {
-      expect(PORTRAIT_FILES[species.id]).toBe(`${species.id}.jpg`);
+  it('基础形态和三位居民都有全身图', () => {
+    for (const id of FULL_BODY_SPECIES) {
+      expect(PORTRAIT_FILES[id]).toBe(`${id}.jpg`);
     }
     for (const npc of createWorld().npcs) {
       if (npc.id === 'grandma' || npc.id === 'qinghe' || npc.id === 'lanchuan') {
@@ -76,8 +75,8 @@ describe('静态立绘', () => {
 });
 
 describe('战斗朝向', () => {
-  it('十二种芽灵都有正面和背面，比例是 2:3', () => {
-    expect(SPECIES_PORTRAIT_IDS).toHaveLength(12);
+  it('三十二种形态都有正面和背面，比例是 2:3', () => {
+    expect(SPECIES_PORTRAIT_IDS).toHaveLength(32);
     for (const id of SPECIES_PORTRAIT_IDS) {
       for (const facing of ['front', 'back'] as const) {
         const name = speciesFacingFile(id, facing);
@@ -95,7 +94,7 @@ describe('战斗朝向', () => {
 
   it('全身立绘是 432×576，宽比高 3:4', () => {
     const files = [
-      ...SPECIES_PORTRAIT_IDS.map((id) => `${id}.jpg`),
+      ...FULL_BODY_SPECIES.map((id) => `${id}.jpg`),
       'player.jpg',
       'grandma.jpg',
       'qinghe.jpg',
@@ -152,7 +151,7 @@ describe('版本号', () => {
   it('读取 package.json 的版本，不随刷新变化', () => {
     const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(APP_VERSION).toBe(pkg.version);
-    expect(APP_VERSION).toBe('1.7.3');
+    expect(APP_VERSION).toBe('1.8.0');
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
