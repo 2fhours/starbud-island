@@ -619,20 +619,50 @@ export function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number
   ctx.restore();
 }
 
+function frameCss(canvas: HTMLCanvasElement): { w: number; h: number } | null {
+  const frame = canvas.parentElement;
+  if (!frame?.classList.contains('portrait-frame')) return null;
+  const w = Math.round(frame.clientWidth);
+  const h = Math.round(frame.clientHeight);
+  if (w < 8 || h < 8) return null;
+  return { w, h };
+}
+
+function paintSurface(canvas: HTMLCanvasElement, cssW: number, cssH: number, framed: boolean): { w: number; h: number; dpr: number } | null {
+  if (!framed) return lockBox(canvas, cssW, cssH);
+  canvas.style.position = 'absolute';
+  canvas.style.inset = '0';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.maxWidth = '100%';
+  canvas.style.maxHeight = '100%';
+  canvas.style.aspectRatio = 'auto';
+  const bitmap = canvasBitmapSize(cssW, cssH, Math.min(2, window.devicePixelRatio || 1));
+  if (canvas.width !== bitmap.w || canvas.height !== bitmap.h) {
+    canvas.width = bitmap.w;
+    canvas.height = bitmap.h;
+  }
+  return { w: cssW, h: cssH, dpr: bitmap.w / cssW };
+}
+
 export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: number, faint = false): void {
+  const framed = frameCss(canvas);
   const fit = canvas.dataset.fit;
-  const css = fit === 'hud' ? { w: 48, h: 48 } : fit === 'card' ? { w: 72, h: 72 } : { w: 132, h: 116 };
-  const stage = canvas.closest('.stage');
-  if (stage && !stage.classList.contains('battle-stage')) {
-    const bounds = stage.getBoundingClientRect();
-    const style = getComputedStyle(stage);
-    const innerH = bounds.height - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
-    if (innerH > 24 && innerH < css.h) {
-      css.h = Math.max(24, innerH - 4);
-      css.w = css.h * (132 / 116);
+  const css = framed ?? (fit === 'hud' ? { w: 48, h: 48 } : fit === 'card' ? { w: 72, h: 72 } : { w: 132, h: 116 });
+  if (!framed) {
+    const stage = canvas.closest('.stage');
+    if (stage && !stage.classList.contains('battle-stage')) {
+      const bounds = stage.getBoundingClientRect();
+      const style = getComputedStyle(stage);
+      const innerH = bounds.height - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+      if (innerH > 24 && innerH < css.h) {
+        css.h = Math.max(24, innerH - 4);
+        css.w = css.h * (132 / 116);
+      }
     }
   }
-  const box = lockBox(canvas, css.w, css.h);
+  const box = paintSurface(canvas, css.w, css.h, !!framed);
+  if (!box) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.setTransform(box.dpr, 0, 0, box.dpr, 0, 0);
@@ -650,6 +680,29 @@ export function paintPortrait(canvas: HTMLCanvasElement, id: SpeciesId, time: nu
     ctx.fill();
     drawCreature(ctx, id, box.w / 2, box.h * 0.78, time, Math.min(box.w, box.h) / 72, false, faint);
   } catch {
+    fallbackCreature(ctx, box.w, box.h);
+  }
+}
+
+export function paintActor(canvas: HTMLCanvasElement, id: string, time: number): void {
+  const framed = frameCss(canvas);
+  const css = framed ?? { w: 84, h: 112 };
+  const box = paintSurface(canvas, css.w, css.h, !!framed);
+  if (!box) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(box.dpr, 0, 0, box.dpr, 0, 0);
+  ctx.clearRect(0, 0, box.w, box.h);
+  const scale = Math.min(box.w, box.h) / 58;
+  ctx.save();
+  ctx.translate(box.w / 2, box.h * 0.78);
+  ctx.scale(scale, scale);
+  try {
+    if (id === 'player') drawPlayer(ctx, 0, 0, 'down', false, time);
+    else drawNpc(ctx, 0, 0, id, time);
+    ctx.restore();
+  } catch {
+    ctx.restore();
     fallbackCreature(ctx, box.w, box.h);
   }
 }

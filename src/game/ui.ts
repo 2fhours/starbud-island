@@ -4,6 +4,7 @@ import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STA
 import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives } from './logic';
 import { SKILL_LIST, getMove, skillStats } from './skills';
 import type { Input } from './input';
+import { actorFor, actorPortraitHtml, bindStandingPortraits, speciesPortraitHtml } from './portraits';
 import type { MoveCat, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
@@ -69,9 +70,17 @@ function typePill(type: string): string {
   return `<span class="type" style="background:${meta.color}">${meta.label}</span>`;
 }
 
-function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'hud' = 'card'): string {
-  const size = fit === 'stage' ? [156, 138] : fit === 'hud' ? [64, 64] : [88, 88];
-  return `<canvas class="portrait portrait-${fit}" data-fit="${fit}" data-species="${id}" data-faint="${faint ? '1' : '0'}" width="${size[0]}" height="${size[1]}" aria-hidden="true"></canvas>`;
+function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'detail' | 'hud' = 'card'): string {
+  if (fit === 'hud') {
+    return `<canvas class="portrait portrait-hud" data-fit="hud" data-species="${id}" data-faint="${faint ? '1' : '0'}" width="64" height="64" aria-hidden="true"></canvas>`;
+  }
+  return speciesPortraitHtml(id, fit, faint);
+}
+
+function talkRow(actor: string | null, body: string, compact = false): string {
+  const id = actor ? actorFor(actor) : null;
+  if (!id) return body;
+  return `<div class="talk-row">${actorPortraitHtml(id, compact)}<div class="talk-copy">${body}</div></div>`;
 }
 
 export function renderOverlay(root: HTMLElement, host: GameHost): void {
@@ -84,14 +93,14 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   if (mode === 'title' || mode === 'confirm-new') {
     inner = titleSheet(host, mode === 'confirm-new');
   } else if (mode === 'create-name') {
-    inner = shell('<p class="eyebrow">出发之前</p><h2>怎么称呼你？</h2>', `<p>选一个旅伴称呼就好，不会上传，也不会当成真实姓名。</p><div class="stack">${NAME_PRESETS.map((name) => `<button class="btn ${host.createName === name ? 'leaf' : 'secondary'}" data-act="pick-name" data-arg="${esc(name)}">${esc(name)}</button>`).join('')}</div>`, `<div class="stack"><button class="btn" data-act="to-starter">选好了</button><button class="texty" data-act="title">返回</button></div>`);
+    inner = shell('<p class="eyebrow">出发之前</p><h2>怎么称呼你？</h2>', talkRow('player', `<p>选一个旅伴称呼就好，不会上传，也不会当成真实姓名。</p><div class="stack">${NAME_PRESETS.map((name) => `<button class="btn ${host.createName === name ? 'leaf' : 'secondary'}" data-act="pick-name" data-arg="${esc(name)}">${esc(name)}</button>`).join('')}</div>`), `<div class="stack"><button class="btn" data-act="to-starter">选好了</button><button class="texty" data-act="title">返回</button></div>`);
   } else if (mode === 'create-starter') {
     inner = shell(`<p class="eyebrow">${esc(host.createName)} 的第一位伙伴</p><h2>选一只芽灵</h2>`, `<div class="choice-grid">${STARTERS.map((id) => {
       const species = getSpecies(id);
       return `<button class="choice ${host.selectedStarter === id ? 'selected' : ''}" data-act="pick-starter" data-arg="${id}">${portrait(id)}<strong>${species.name}</strong><div>${typePill(species.type)}</div><small>${esc(species.blurb)}</small></button>`;
     }).join('')}</div>`, `<div class="stack"><button class="btn leaf" data-act="confirm-starter" ${host.selectedStarter ? '' : 'disabled'}>和它一起出发</button><button class="texty" data-act="to-name">返回</button></div>`);
   } else if (mode === 'dialogue' && host.dialogue) {
-    inner = shell(`<p class="eyebrow">${esc(host.dialogue.speaker)}</p>`, `<p class="dialogue-copy" data-act="dialogue-next">${esc(host.dialogue.text)}</p>`, `<p class="fine">点文字可跳过，也会自动继续</p>`);
+    inner = shell(`<p class="eyebrow">${esc(host.dialogue.speaker)}</p>`, talkRow(host.dialogue.speaker, `<p class="dialogue-copy" data-act="dialogue-next">${esc(host.dialogue.text)}</p>`), `<p class="fine">点文字可跳过，也会自动继续</p>`);
   } else if (mode === 'encounter' && host.encounterView) {
     const view = host.encounterView;
     inner = shell(`<p class="eyebrow">野生芽灵</p><h2>${esc(view.name)}</h2>`, `<div class="stage" data-type="${esc(stageElement(view.type as TypeId))}">${portrait(view.speciesId, false, 'stage')}</div><p>${typePill(view.type)} ${view.level} 级</p>${hpMarkup(view.hp, view.max)}<p>可以邀请它同行，也可以先比试。体力越低，星芽球越容易成功。</p>`, `<div class="stack actions"><button class="btn leaf" data-act="encounter-catch">捕捉</button><button class="btn" data-act="encounter-fight">对战</button><button class="btn secondary" data-act="encounter-leave">先离开</button></div>`, 'encounter-sheet');
@@ -103,7 +112,8 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   } else if (mode === 'battle' && host.battle && host.play) {
     inner = battleSheet(host);
   } else if (mode === 'menu') {
-    inner = shell('<h2>菜单</h2>', `<div class="stack"><button class="btn secondary" data-act="panel" data-arg="team">队伍</button><button class="btn secondary" data-act="panel" data-arg="dex">图鉴</button><button class="btn secondary" data-act="panel" data-arg="elements">五行阴阳</button><button class="btn secondary" data-act="panel" data-arg="skilldex">技能图鉴</button><button class="btn secondary" data-act="panel" data-arg="bag">背包</button><button class="btn secondary" data-act="panel" data-arg="quest">委托</button><button class="btn secondary" data-act="panel" data-arg="help">操作说明</button><a class="btn secondary" href="./iso.html">2.5D 预览</a><a class="btn secondary" href="./view3d.html">3D 预览</a></div>`, `<div class="stack"><button class="btn" data-act="save">手动保存</button><button class="btn secondary" data-act="mute">${host.muted ? '打开音效' : '关闭音效'}</button><button class="btn secondary" data-act="title">回到标题</button><button class="texty" data-act="ask-reset">清除存档</button><button class="texty" data-act="close">关闭</button></div>`);
+    const identity = host.play ? `<div class="identity">${actorPortraitHtml('player', true)}<div><strong>${esc(host.play.name)}</strong><span class="fine">旅人</span></div></div>` : '';
+    inner = shell('<h2>菜单</h2>', `${identity}<div class="stack"><button class="btn secondary" data-act="panel" data-arg="team">队伍</button><button class="btn secondary" data-act="panel" data-arg="dex">图鉴</button><button class="btn secondary" data-act="panel" data-arg="elements">五行阴阳</button><button class="btn secondary" data-act="panel" data-arg="skilldex">技能图鉴</button><button class="btn secondary" data-act="panel" data-arg="bag">背包</button><button class="btn secondary" data-act="panel" data-arg="quest">委托</button><button class="btn secondary" data-act="panel" data-arg="help">操作说明</button><a class="btn secondary" href="./iso.html">2.5D 预览</a><a class="btn secondary" href="./view3d.html">3D 预览</a></div>`, `<div class="stack"><button class="btn" data-act="save">手动保存</button><button class="btn secondary" data-act="mute">${host.muted ? '打开音效' : '关闭音效'}</button><button class="btn secondary" data-act="title">回到标题</button><button class="texty" data-act="ask-reset">清除存档</button><button class="texty" data-act="close">关闭</button></div>`);
   } else if (mode === 'team' && host.play) {
     inner = teamSheet(host.play);
   } else if (mode === 'dex' && host.play) {
@@ -132,6 +142,7 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   }
   const align = mode === 'title' || mode === 'confirm-new' ? 'title-dim' : '';
   root.innerHTML = `<div class="dim ${align}">${inner}</div>`;
+  bindStandingPortraits(root);
 }
 
 function titleSheet(host: GameHost, confirm: boolean): string {
@@ -170,7 +181,7 @@ function teamSheet(play: PlayState): string {
     const species = getSpecies(mon.speciesId);
     const max = maxHp(mon);
     const names = (mon.moves ?? []).map((id) => esc(getMove(id).name)).join(' · ');
-    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0)}<div><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
+    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
     ? play.box.map((mon) => `<span>${esc(getSpecies(mon.speciesId).name)} ${mon.level}级</span>`).join('、')
@@ -231,14 +242,14 @@ function npcSheet(host: GameHost): string {
   if (host.npcId === 'grandma') {
     const lines = grandmaFollowup(play.quest);
     const ready = play.quest.caughtWild && play.quest.bossDefeated && !play.quest.completed;
-    return shell('<p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>', lines.map((line) => `<p>${esc(line)}</p>`).join(''), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
+    return shell('<p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>', talkRow('grandma', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }
   if (host.npcId === 'qinghe') {
     const done = play.trainers.qinghe;
-    return shell('<h2>青禾</h2>', practiceScript(done).map((line) => `<p>${esc(line.text)}</p>`).join(''), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再练一次' : '请多指教'}</button><button class="btn secondary" data-act="close">下次再说</button></div>`);
+    return shell('<h2>青禾</h2>', talkRow('qinghe', practiceScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再练一次' : '请多指教'}</button><button class="btn secondary" data-act="close">下次再说</button></div>`);
   }
   const done = play.trainers.lanchuan;
-  return shell('<h2>岚川</h2>', bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join(''), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
+  return shell('<h2>岚川</h2>', talkRow('lanchuan', bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
 }
 
 function elementsSheet(): string {
@@ -276,7 +287,7 @@ function loadoutSheet(host: GameHost): string {
   const equipped = new Set(mon.moves ?? []);
   const known = learnableMoves(mon);
   const cards = known.map((move) => `<button class="skill-card ${equipped.has(move.id) ? 'on' : ''}" data-act="equip-move" data-arg="${move.id}"><strong>${esc(move.name)}</strong><span>${TIER_LABEL[move.tier]} · ${CAT_LABEL[move.cat]} · ${TIER_LEVEL[move.tier]}级</span><small>${esc(move.desc)}</small></button>`).join('');
-  return shell(`<h2>${esc(getSpecies(mon.speciesId).name)}的技能</h2>`, `<p>${typePill(aspectOf(mon))} 已装备 ${equipped.size}/${LOADOUT_LIMIT}。点一下装备或卸下。神级要 24 级。</p><div class="skill-list">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="team">返回队伍</button>`);
+  return shell(`<h2>${esc(getSpecies(mon.speciesId).name)}的技能</h2>`, `<div class="talk-row">${portrait(mon.speciesId, mon.hp <= 0, 'card')}<div class="talk-copy"><p>${typePill(aspectOf(mon))} 已装备 ${equipped.size}/${LOADOUT_LIMIT}。点一下装备或卸下。神级要 24 级。</p></div></div><div class="skill-list">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="team">返回队伍</button>`);
 }
 
 export function mountTouch(el: HTMLElement, input: Input, onAct: (act: string) => void): void {
