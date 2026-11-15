@@ -147,13 +147,15 @@ describe('存档与地图', () => {
       x: start.x,
       y: start.y,
       dir: 'down',
+      mapId: 'island',
+      ridgeQuest: { introduced: false, caught: false, trial: false, completed: false },
       team: [makeMon('lujiao', 5)],
       box: [],
       dex: emptyDex(),
       balls: 9,
       quest: { introduced: true, caughtWild: true, bossDefeated: false, completed: false },
       pickups: ['balls-south'],
-      trainers: { qinghe: true, lanchuan: false },
+      trainers: { qinghe: true, lanchuan: false, shiling: false },
       playMs: 12000,
     };
     play.dex.lujiao = { seen: true, caught: true };

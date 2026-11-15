@@ -1,7 +1,7 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
-import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives } from './logic';
+import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, getMove, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, bindStandingPortraits, speciesPortraitHtml } from './portraits';
@@ -122,7 +122,10 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
     inner = shell('<h2>背包</h2>', `<p><strong>星芽球 × ${host.play.balls}</strong></p><p>邀请芽灵同行时消耗。光环越接近绿色目标圈，成功率越高。少于 8 个时，在星芽驿休息会补到 8 个。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
   } else if (mode === 'quest' && host.play) {
     const items = questObjectives(host.play.quest);
-    inner = shell('<h2>芽婆婆的委托</h2>', `${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+    const ridge = host.play.quest.completed || host.play.mapId === 'ridge'
+      ? `<h3>星雾岭</h3>${ridgeObjectives(host.play.ridgeQuest).map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">${host.play.quest.completed ? '岛北路口已经通往星雾岭。岭北的雾还没开放。' : '完成岛上的委托后，岛北路口才会打开。'}</p>`
+      : '<p class="fine">完成岛上的委托后，岛北路口才会通往星雾岭。南边的海还过不去。</p>';
+    inner = shell('<h2>芽婆婆的委托</h2>', `${items.map((item) => `<div class="check ${item.done ? 'done' : ''}"><span>${esc(item.title)}</span><strong>${item.done ? '完成' : '进行中'}</strong></div>`).join('')}<p class="fine">做完两件事后，回星芽驿找芽婆婆复命。失败可以治疗后再试。</p>${ridge}`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
   } else if (mode === 'elements') {
     inner = elementsSheet();
   } else if (mode === 'skilldex') {
@@ -136,7 +139,8 @@ export function renderOverlay(root: HTMLElement, host: GameHost): void {
   } else if (mode === 'npc' && host.npcId && host.play) {
     inner = npcSheet(host);
   } else if (mode === 'heal') {
-    inner = shell('<p class="eyebrow">星芽驿</p><h2>要在这里休息吗？</h2>', '<p>队伍里的伙伴会恢复全部体力。星芽球如果少于 8 个，会补到 8 个。休息需要你自己确认。</p>', `<div class="row"><button class="btn leaf" data-act="heal-yes">休息</button><button class="btn secondary" data-act="close">离开</button></div>`);
+    const ridge = host.play?.mapId === 'ridge';
+    inner = shell(ridge ? '<p class="eyebrow">星雾岭</p><h2>要在岭南营地休息吗？</h2>' : '<p class="eyebrow">星芽驿</p><h2>要在这里休息吗？</h2>', '<p>队伍里的伙伴会恢复全部体力。星芽球如果少于 8 个，会补到 8 个。休息需要你自己确认。</p>', `<div class="row"><button class="btn leaf" data-act="heal-yes">休息</button><button class="btn secondary" data-act="close">离开</button></div>`);
   } else if (mode === 'sign' && host.signView) {
     inner = shell(`<p class="eyebrow">告示</p><h2>${esc(host.signView.title)}</h2>`, `<p data-act="close">${esc(host.signView.text)}</p>`, `<p class="fine">读完会自动返回</p>`);
   }
@@ -191,12 +195,13 @@ function teamSheet(play: PlayState): string {
 
 function dexSheet(play: PlayState): string {
   const caught = Object.values(play.dex).filter((entry) => entry.caught).length;
+  const total = SPECIES_LIST.length;
   const cards = SPECIES_LIST.map((species) => {
     const entry = play.dex[species.id];
     if (!entry?.seen) return `<article class="dex-card unknown"><div class="portrait"></div><strong>？？？</strong><p>还没见过</p></article>`;
     return `<article class="dex-card">${portrait(species.id)}<strong>${esc(species.name)}</strong><div>${typePill(species.type)}</div><p>${entry.caught ? esc(species.dex) : '见过了，还没同行。'}</p></article>`;
   }).join('');
-  return shell(`<h2>芽灵图鉴 ${caught}/8</h2>`, `<div class="dex-grid">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
+  return shell(`<h2>芽灵图鉴 ${caught}/${total}</h2>`, `<div class="dex-grid">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
 }
 
 function battleSheet(host: GameHost): string {
@@ -248,8 +253,26 @@ function npcSheet(host: GameHost): string {
     const done = play.trainers.qinghe;
     return shell('<h2>青禾</h2>', talkRow('qinghe', practiceScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再练一次' : '请多指教'}</button><button class="btn secondary" data-act="close">下次再说</button></div>`);
   }
-  const done = play.trainers.lanchuan;
-  return shell('<h2>岚川</h2>', talkRow('lanchuan', bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
+  if (host.npcId === 'lanchuan') {
+    const done = play.trainers.lanchuan;
+    return shell('<h2>岚川</h2>', talkRow('lanchuan', bossScript(done).map((line) => `<p>${esc(line.text)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
+  }
+  if (host.npcId === 'wushou') {
+    const quest = play.ridgeQuest;
+    const ready = quest.caught && quest.trial && !quest.completed;
+    const lines = quest.completed
+      ? ['岭上的委托已经做完了。南边台阶回星芽岛，北边的雾还关着。']
+      : ['我是雾守。星雾岭上的芽灵和岛上的不是同一种。', '先收服一只，再去北面让石岭看看你们。北边的牌子后面没有下一张地图。'];
+    return shell('<p class="eyebrow">星雾岭</p><h2>雾守</h2>', talkRow('雾守', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready || quest.completed ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
+  }
+  if (host.npcId === 'shiling') {
+    const done = play.trainers.shiling;
+    const lines = done
+      ? ['试炼已经通过了。想再练可以，这次不再发星芽球。', '雾守在岭南等你。再往北的路还没开。']
+      : ['我是石岭。岛上的试炼和这里不是同一场。', '我的伙伴比岛上的更老练。准备好再开始，撑不住就回岭南营地。'];
+    return shell('<h2>石岭</h2>', talkRow('石岭', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="row"><button class="btn" data-act="npc-fight">${done ? '再战一次' : '开始试炼'}</button><button class="btn secondary" data-act="close">再准备一下</button></div>`);
+  }
+  return '';
 }
 
 function elementsSheet(): string {
@@ -333,6 +356,8 @@ export function hudHtml(host: GameHost): string {
   const lead = host.play.team[0];
   const species = getSpecies(lead.speciesId);
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
+  const total = SPECIES_LIST.length;
+  const mapName = host.play.mapId === 'ridge' ? '星雾岭' : '星芽岛';
   const quest = host.play.quest.completed ? '<small class="quest-chip">委托完成</small>' : '<small class="quest-chip">委托进行中</small>';
-  return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(aspectOf(lead))}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/8</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
+  return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(aspectOf(lead))}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong class="map-chip">${mapName}</strong><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/${total}</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }

@@ -1,6 +1,6 @@
 import { AudioEngine } from './audio';
 import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type Battle } from './battle';
-import { bossScript, getSpecies, introScript, practiceScript } from './data';
+import { RIDGE_TRIAL, bossScript, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
   catchProbability,
@@ -27,6 +27,7 @@ import { clearSave, readSave, writeSave } from './save';
 import {
   drawBall,
   drawCreature,
+  drawGate,
   drawFlower,
   drawGull,
   drawHouse,
@@ -45,7 +46,7 @@ import {
 import type { Dir, Mon, PlayState, SpeciesId } from './types';
 import { DRAG_HINT_KEY, MUTE_KEY, START_BALLS } from './types';
 import { hudHtml, mountTouch, renderOverlay, skillResultsHtml, type CaptureView, type EncounterView, type GameHost } from './ui';
-import { COLS, ROWS, TILE, canWalkPixel, createWorld, tileCenter, type NpcDef, type SignDef, type World } from './world';
+import { COLS, ROWS, TILE, canWalkPixel, createWorld, gateChoice, tileCenter, worldFor, type GateDef, type NpcDef, type SignDef, type World } from './world';
 
 interface Wild {
   id: string;
@@ -78,7 +79,7 @@ interface Particle {
   size: number;
 }
 
-type Nearby = { kind: 'npc'; npc: NpcDef } | { kind: 'door' } | { kind: 'sign'; sign: SignDef };
+type Nearby = { kind: 'npc'; npc: NpcDef } | { kind: 'door' } | { kind: 'sign'; sign: SignDef } | { kind: 'gate'; gate: GateDef };
 
 export class Game implements GameHost {
   mode = 'title';
@@ -113,7 +114,9 @@ export class Game implements GameHost {
   private readonly overlay: HTMLElement;
   private readonly input = new Input();
   private readonly audio = new AudioEngine();
-  private readonly world: World;
+  private world: World;
+  private readonly wildCache = new Map<string, Wild[]>();
+  private travelLockUntil = 0;
   private readonly fast: boolean;
   private viewW = 800;
   private viewH = 600;
@@ -139,7 +142,7 @@ export class Game implements GameHost {
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
   private talkLockId = '';
-  private trainerKey: 'qinghe' | 'lanchuan' | null = null;
+  private trainerKey: 'qinghe' | 'lanchuan' | 'shiling' | null = null;
   private nearby: Nearby | null = null;
   private particles: Particle[] = [];
   private hist: { x: number; y: number }[] = [];
@@ -412,11 +415,14 @@ export class Game implements GameHost {
         this.skipLog();
         return;
       case 'npc-heal':
+        this.doHeal(this.npcId === 'wushou' ? '雾守' : '芽婆婆');
+        return;
       case 'heal-yes':
-        this.doHeal(act === 'npc-heal' ? '芽婆婆' : '星芽驿');
+        this.doHeal(this.play?.mapId === 'ridge' ? '雾守' : '星芽驿');
         return;
       case 'npc-quest':
-        this.turnInQuest();
+        if (this.npcId === 'wushou') this.turnInRidge();
+        else this.turnInQuest();
         return;
       case 'npc-fight':
         this.startNpcBattle();
@@ -607,6 +613,10 @@ export class Game implements GameHost {
         sprites.push({ y: (pickup.y + 0.8) * TILE, draw: () => drawBall(this.ctx, sx, sy, this.time) });
       }
     }
+    for (const gate of this.world.gates) {
+      const open = !!this.play && gateChoice(this.play.quest.completed, gate) === 'go';
+      drawGate(this.ctx, (gate.x + 0.5) * TILE - this.camX, (gate.y + 1) * TILE - this.camY, open);
+    }
     for (const npc of this.world.npcs) {
       const sx = (npc.x + 0.5) * TILE - this.camX;
       const sy = (npc.y + 1) * TILE - this.camY - 6;
@@ -735,12 +745,16 @@ export class Game implements GameHost {
       balls: START_BALLS,
       quest: { introduced: false, caughtWild: false, bossDefeated: false, completed: false },
       pickups: [],
-      trainers: { qinghe: false, lanchuan: false },
+      mapId: 'island',
+      ridgeQuest: { introduced: false, caught: false, trial: false, completed: false },
+      trainers: { qinghe: false, lanchuan: false, shiling: false },
       playMs: 0,
     };
     this.followX = spawn.x - 28;
     this.followY = spawn.y + 8;
     this.hist = [];
+    this.wildCache.clear();
+    this.world = createWorld();
     this.resetWilds();
     this.persist(true);
     const lines = introScript(this.createName);
@@ -758,6 +772,7 @@ export class Game implements GameHost {
       this.refresh();
       return;
     }
+    this.world = worldFor(saved.mapId);
     if (!canWalkPixel(this.world, saved.x, saved.y)) {
       const spawn = tileCenter(this.world.spawnTile.x, this.world.spawnTile.y);
       saved.x = spawn.x;
@@ -767,21 +782,30 @@ export class Game implements GameHost {
     this.followX = saved.x - 20;
     this.followY = saved.y + 10;
     this.hist = [];
+    this.wildCache.clear();
     this.resetWilds();
     this.mode = 'explore';
     this.encounterLockUntil = this.time + 0.5;
-    this.toast(this.claimDragHint() ?? '回到了星芽岛');
+    this.toast(this.claimDragHint() ?? `回到了${this.world.name}`);
     this.refresh();
   }
 
   private interact(): void {
     if (this.mode !== 'explore' || !this.nearby) {
-      if (this.mode === 'explore') this.toast('靠近芽婆婆、告示或驿站门口再交谈');
+      if (this.mode === 'explore') this.toast('靠近芽婆婆、告示、路口或驿站门口再交谈');
+      return;
+    }
+    if (this.nearby.kind === 'gate') {
+      this.useGate(this.nearby.gate);
       return;
     }
     if (this.nearby.kind === 'npc' && this.nearby.npc.id === this.talkLockId && this.time < this.talkLockUntil) return;
     this.audio.play('menu');
     if (this.nearby.kind === 'npc') {
+      if (this.play && this.nearby.npc.id === 'wushou' && !this.play.ridgeQuest.introduced) {
+        this.play.ridgeQuest.introduced = true;
+        this.persist(true);
+      }
       this.npcId = this.nearby.npc.id;
       this.mode = 'npc';
     } else if (this.nearby.kind === 'door') this.mode = 'heal';
@@ -815,6 +839,64 @@ export class Game implements GameHost {
     this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest), () => this.persist(false));
   }
 
+  private turnInRidge(): void {
+    if (!this.play) return;
+    const quest = this.play.ridgeQuest;
+    const ready = quest.caught && quest.trial && !quest.completed;
+    if (ready) {
+      quest.completed = true;
+      this.audio.play('level');
+    }
+    const lines = quest.completed
+      ? ready
+        ? ['岭上的事你做完了。雾还在，但路你已经认得。', '再往北的山路仍关着，那不是下一张地图。南边的台阶可以回星芽岛。']
+        : ['岭上的委托已经完成了。南边的台阶回到星芽岛，北边的雾还没开放。']
+      : quest.caught && quest.trial
+        ? ['可以复命了。']
+        : ['先在岭上收服一只芽灵，再去北面找石岭。', '北边的牌子后面没有路，不要把雾当成下一张地图。'];
+    this.openDialogue('雾守', lines, () => this.persist(false));
+  }
+
+  private noteCatch(): void {
+    if (!this.play) return;
+    if (this.play.mapId === 'ridge') this.play.ridgeQuest.caught = true;
+    else this.play.quest.caughtWild = true;
+  }
+
+  private useGate(gate: GateDef): void {
+    if (!this.play) return;
+    if (this.time < this.travelLockUntil) return;
+    const choice = gateChoice(this.play.quest.completed, gate);
+    if (choice === 'stay' || !gate.to) {
+      this.toast(gate.textLocked);
+      this.audio.play('tap');
+      return;
+    }
+    const arriveX = gate.arriveX;
+    const arriveY = gate.arriveY;
+    this.play.mapId = gate.to;
+    this.world = worldFor(gate.to);
+    const pos = tileCenter(arriveX, arriveY);
+    if (!canWalkPixel(this.world, pos.x, pos.y)) {
+      const spawn = tileCenter(this.world.spawnTile.x, this.world.spawnTile.y);
+      this.play.x = spawn.x;
+      this.play.y = spawn.y;
+    } else {
+      this.play.x = pos.x;
+      this.play.y = pos.y;
+    }
+    this.followX = this.play.x;
+    this.followY = this.play.y;
+    this.travelLockUntil = this.time + 1.2;
+    this.encounterLockUntil = this.time + 0.8;
+    this.talkLockUntil = this.time + 1.2;
+    this.resetWilds();
+    this.toast(gate.textOpen);
+    this.audio.play('menu');
+    this.persist(true);
+    this.refresh();
+  }
+
   private startNpcBattle(): void {
     if (!this.play || !this.npcId) return;
     if (!this.play.team.some((mon) => mon.hp > 0)) {
@@ -828,6 +910,14 @@ export class Game implements GameHost {
       this.beginLogs([practiceScript(this.play.trainers.qinghe)[0].text, '青禾派出了风铃鸟'], () => undefined);
       return;
     }
+    if (this.npcId === 'shiling') {
+      this.trainerKey = 'shiling';
+      this.battle = prepareBattle(this.play.team, RIDGE_TRIAL.map((entry) => makeMon(entry.speciesId, entry.level)), 'trainer', '石岭');
+      this.mode = 'battle';
+      this.beginLogs(['石岭放下拐杖。雾里的试炼开始了。', '石岭派出了雾灯蛾'], () => undefined);
+      return;
+    }
+    if (this.npcId !== 'lanchuan') return;
     this.trainerKey = 'lanchuan';
     this.battle = prepareBattle(this.play.team, [makeMon('yanwei', 7), makeMon('yanke', 8), makeMon('dianrong', 7)], 'trainer', '岚川');
     this.mode = 'battle';
@@ -903,7 +993,7 @@ export class Game implements GameHost {
       if (success) {
         const where = receiveMon(this.play.team, this.play.box, cloneMon(mon));
         this.markCaught(mon.speciesId);
-        this.play.quest.caughtWild = true;
+        this.noteCatch();
         if (wild) this.retireWild(wild);
         const logs = [`${timingLabel(timing)}，${percent}`, ...resolveCatch(this.battle, true, () => this.rng())];
         logs.push(where === 'team' ? `${name}加入了队伍` : `队伍满了，${name}寄存在星芽驿`);
@@ -932,7 +1022,7 @@ export class Game implements GameHost {
     if (success) {
       const where = receiveMon(this.play.team, this.play.box, cloneMon(mon));
       this.markCaught(mon.speciesId);
-      this.play.quest.caughtWild = true;
+      this.noteCatch();
       const lead = this.play.team.find((member) => member.uid === this.play!.team[0].uid) ?? this.play.team[0];
       lines.push(`收服了${name}！`, where === 'team' ? '它加入了队伍。' : '队伍已满，先寄存在星芽驿。', ...grantExp(lead, expGain(mon.level, getSpecies(mon.speciesId).baseExp, false)));
       if (wild) this.retireWild(wild);
@@ -1025,6 +1115,16 @@ export class Game implements GameHost {
       }
       return '岚川认可了这次再战。';
     }
+    if (this.trainerKey === 'shiling') {
+      if (!this.play.trainers.shiling) {
+        this.play.trainers.shiling = true;
+        this.play.ridgeQuest.trial = true;
+        this.play.balls += 5;
+        this.audio.play('level');
+        return '试炼通过了。石岭留下 5 个星芽球，让你回岭南告诉雾守。';
+      }
+      return '石岭说这次只是再练。';
+    }
     return `${name}收回了伙伴。`;
   }
 
@@ -1035,11 +1135,15 @@ export class Game implements GameHost {
     this.play.y = spawn.y;
     this.followX = spawn.x - 20;
     this.followY = spawn.y + 12;
+    this.travelLockUntil = this.time + 1.2;
     healTeam(this.play.team);
     this.play.balls = topUpBalls(this.play.balls);
     this.encounterLockUntil = this.time + 1;
     this.audio.play('heal');
-    this.openDialogue('芽婆婆', ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。'], () => this.persist(true));
+    const lines = this.play.mapId === 'ridge'
+      ? ['伙伴们都撑不住了。我把你们接回了岭南营地。', '休息好了再往上走，南边的台阶也能回岛。']
+      : ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。'];
+    this.openDialogue(this.play.mapId === 'ridge' ? '雾守' : '芽婆婆', lines, () => this.persist(true));
   }
 
   private leaveEncounter(): void {
@@ -1094,6 +1198,7 @@ export class Game implements GameHost {
     const ty = this.play.y / TILE;
     const near = (x: number, y: number, radius = 1.35) => Math.hypot(tx - (x + 0.5), ty - (y + 0.5)) <= radius;
     if (Math.floor(tx) === this.world.door.x && Math.floor(ty) === this.world.door.y) return { kind: 'door' };
+    for (const gate of this.world.gates) if (near(gate.x, gate.y, 1.15)) return { kind: 'gate', gate };
     for (const npc of this.world.npcs) if (near(npc.x, npc.y, 1.28)) return { kind: 'npc', npc };
     if (near(this.world.door.x, this.world.door.y, 1.25)) return { kind: 'door' };
     for (const sign of this.world.signs) if (near(sign.x, sign.y, 1.4)) return { kind: 'sign', sign };
@@ -1101,8 +1206,12 @@ export class Game implements GameHost {
   }
 
   private nearbyText(nearby: Nearby): string {
+    if (nearby.kind === 'gate') {
+      const open = !!this.play && gateChoice(this.play.quest.completed, nearby.gate) === 'go';
+      return open ? nearby.gate.promptOpen : nearby.gate.promptLocked;
+    }
     if (nearby.kind === 'npc') return `交谈 · ${nearby.npc.name}`;
-    if (nearby.kind === 'door') return '交谈 · 星芽驿';
+    if (nearby.kind === 'door') return this.play?.mapId === 'ridge' ? '交谈 · 岭南营地' : '交谈 · 星芽驿';
     return `阅读 · ${nearby.sign.title}`;
   }
 
@@ -1271,6 +1380,12 @@ export class Game implements GameHost {
   }
 
   private resetWilds(): void {
+    const key = this.play?.mapId ?? this.world.id;
+    const cached = this.wildCache.get(key);
+    if (cached) {
+      this.wilds = cached;
+      return;
+    }
     this.wilds = this.world.spawns.map((spawn, index) => {
       const center = tileCenter(spawn.x, spawn.y);
       return {
@@ -1293,6 +1408,7 @@ export class Game implements GameHost {
         seed: index + 1.3,
       };
     });
+    this.wildCache.set(key, this.wilds);
   }
 
   private persist(silent: boolean): void {
@@ -1311,7 +1427,8 @@ export class Game implements GameHost {
       return;
     }
     const caught = Object.values(saved.dex).filter((entry) => entry.caught).length;
-    this.saveSummaryText = `${saved.name} · 图鉴 ${caught}/8 · ${formatPlay(saved.playMs)}`;
+    const total = Object.keys(saved.dex).length;
+    this.saveSummaryText = `${saved.name} · 图鉴 ${caught}/${total} · ${formatPlay(saved.playMs)}`;
   }
 
   private refresh(): void {

@@ -1,12 +1,13 @@
-import { getSpecies } from './data';
+import { getSpecies, SPECIES_LIST } from './data';
 import { emptyDex, ensureLoadout, maxHp, maxMp } from './logic';
 import { convertLegacyHp, ivFromUid, legacyMaxHp, validIvs } from './stats';
-import type { Dir, Five, Mon, PlayState, SpeciesId, TypeId } from './types';
+import type { Dir, Five, MapId, Mon, PlayState, SpeciesId, TypeId } from './types';
 import { SAVE_KEY } from './types';
 import { TYPE_META } from './elements';
+import { canWalkPixel, tileCenter, worldFor } from './world';
 
 const DIRS = new Set<Dir>(['down', 'up', 'left', 'right']);
-const SPECIES = new Set<SpeciesId>(['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen']);
+const SPECIES = new Set<SpeciesId>(SPECIES_LIST.map((species) => species.id));
 
 function asMon(value: unknown): Mon | null {
   if (!value || typeof value !== 'object') return null;
@@ -69,11 +70,21 @@ export function deserialize(raw: string | null): PlayState | null {
       }
     }
     for (const mon of team as Mon[]) dex[mon.speciesId].seen = true;
+    const mapId: MapId = play.mapId === 'ridge' ? 'ridge' : 'island';
+    const world = worldFor(mapId);
+    let x = play.x;
+    let y = play.y;
+    if (!canWalkPixel(world, x, y)) {
+      const spawn = tileCenter(world.spawnTile.x, world.spawnTile.y);
+      x = spawn.x;
+      y = spawn.y;
+    }
     return {
       name: play.name.slice(0, 8),
-      x: play.x,
-      y: play.y,
+      x,
+      y,
       dir: play.dir,
+      mapId,
       team: team as Mon[],
       box: box as Mon[],
       dex,
@@ -84,10 +95,17 @@ export function deserialize(raw: string | null): PlayState | null {
         bossDefeated: !!play.quest?.bossDefeated,
         completed: !!play.quest?.completed,
       },
+      ridgeQuest: {
+        introduced: !!play.ridgeQuest?.introduced,
+        caught: !!play.ridgeQuest?.caught,
+        trial: !!play.ridgeQuest?.trial,
+        completed: !!play.ridgeQuest?.completed,
+      },
       pickups: Array.isArray(play.pickups) ? play.pickups.filter((id) => typeof id === 'string') : [],
       trainers: {
         qinghe: !!play.trainers?.qinghe,
         lanchuan: !!play.trainers?.lanchuan,
+        shiling: !!play.trainers?.shiling,
       },
       playMs: typeof play.playMs === 'number' ? play.playMs : 0,
     };
