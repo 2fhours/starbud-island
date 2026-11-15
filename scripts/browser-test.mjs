@@ -366,7 +366,7 @@ try {
   await page.waitForSelector('[data-act="encounter-catch"]', { timeout: 4000 });
   await page.waitForFunction(() => {
     const img = document.querySelector('.encounter-sheet img.standing');
-    return !!img && img.complete && img.naturalWidth >= 500 && img.naturalWidth * 3 === img.naturalHeight * 2;
+    return !!img && img.complete && img.naturalWidth === 384 && img.naturalHeight === 576;
   });
   const encounterFit = await page.evaluate(() => {
     const img = document.querySelector('.encounter-sheet img.standing');
@@ -391,7 +391,7 @@ try {
       innerHeight: window.innerHeight,
     };
   });
-  if (encounterFit.tag !== 'IMG' || !String(encounterFit.src).includes('/portraits/yanwei-front.jpg') || encounterFit.nw < 500 || encounterFit.nh < 700 || encounterFit.nw * 3 !== encounterFit.nh * 2) {
+  if (encounterFit.tag !== 'IMG' || !String(encounterFit.src).includes('/portraits/yanwei-front.jpg') || encounterFit.nw !== 384 || encounterFit.nh !== 576 || encounterFit.nw * 3 !== encounterFit.nh * 2) {
     throw new Error(`焰尾狐立绘没有加载 ${JSON.stringify(encounterFit)}`);
   }
   if (encounterFit.rw > 180 || encounterFit.rh > 160 || encounterFit.rw < 24 || !encounterFit.inside) {
@@ -772,7 +772,7 @@ try {
   await page.click('[data-arg="team"]');
   await page.waitForFunction(() => {
     const img = document.querySelector('.mon-card img.standing');
-    return !!img && img.complete && img.naturalWidth >= 500 && img.naturalWidth * 3 === img.naturalHeight * 2 && (img.getAttribute('src') || '').includes('/portraits/lujiao-front.jpg');
+    return !!img && img.complete && img.naturalWidth === 384 && img.naturalHeight === 576 && (img.getAttribute('src') || '').includes('/portraits/lujiao-front.jpg');
   });
   await page.screenshot({ path: `${shotDir}/07-team.png` });
   const teamStats = await page.evaluate(() => {

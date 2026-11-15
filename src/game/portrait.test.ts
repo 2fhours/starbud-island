@@ -84,11 +84,28 @@ describe('战斗朝向', () => {
         const file = new URL(`../../public/portraits/${name}`, import.meta.url);
         expect(existsSync(file), name).toBe(true);
         const size = jpegSize(readFileSync(file));
+        expect(size, name).toEqual({ w: 384, h: 576 });
         expect(size.w * 3, name).toBe(size.h * 2);
       }
       expect(speciesFacingSrc(id, 'front')).toBe(`${import.meta.env.BASE_URL}portraits/${id}-front.jpg`);
       expect(speciesFacingSrc(id, 'back')).toContain(`/portraits/${id}-back.jpg`);
       expect(speciesFacingSrc(id, 'back')).not.toContain(`${id}-front.jpg`);
+    }
+  });
+
+  it('全身立绘是 432×576，宽比高 3:4', () => {
+    const files = [
+      ...SPECIES_PORTRAIT_IDS.map((id) => `${id}.jpg`),
+      'player.jpg',
+      'grandma.jpg',
+      'qinghe.jpg',
+      'lanchuan.jpg',
+    ];
+    expect(files).toHaveLength(16);
+    for (const name of files) {
+      const size = jpegSize(readFileSync(new URL(`../../public/portraits/${name}`, import.meta.url)));
+      expect(size, name).toEqual({ w: 432, h: 576 });
+      expect(size.w * 4, name).toBe(size.h * 3);
     }
   });
 
@@ -135,7 +152,7 @@ describe('版本号', () => {
   it('读取 package.json 的版本，不随刷新变化', () => {
     const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(APP_VERSION).toBe(pkg.version);
-    expect(APP_VERSION).toBe('1.7.1');
+    expect(APP_VERSION).toBe('1.7.2');
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
