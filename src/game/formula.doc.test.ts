@@ -6,6 +6,7 @@ import {
   catchProbability,
   actionOrder,
   damageOf,
+  settleDamage,
   expGain,
   ensureLoadout,
   expToNext,
@@ -63,24 +64,52 @@ describe('设定文档和公式一致', () => {
     const zero = { con: 0, str: 0, int: 0, spi: 0, spd: 0 };
     const attacker = makeMon('luzhu', 8, 1, true, zero);
     const move = getMove('yinshui-basic-attack-0');
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0.5).damage).toBe(22);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0).damage).toBe(20);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 1).damage).toBe(23);
-    expect(damageOf(attacker, makeMon('lujiao', 8, 1, true, zero), move, () => 0.5).damage).toBe(8);
-    expect(formulas).toContain('样例伤害 22');
-    expect(formulas).toContain('样例伤害低 20');
-    expect(formulas).toContain('样例伤害高 23');
-    expect(formulas).toContain('样例相生伤害 8');
+    const fox = makeMon('yanwei', 8, 1, true, zero);
+    const superHit = damageOf(attacker, fox, move, () => 0.5);
+    expect(superHit.attackBonus).toBeGreaterThan(superHit.defenseCut);
+    expect(superHit.damage).toBe(21);
+    expect(damageOf(attacker, fox, move, () => 0).damage).toBe(17);
+    expect(damageOf(attacker, fox, move, () => 1).damage).toBe(25);
+    const plainAttacker = makeMon('yanwei', 8, 1, true, zero);
+    plainAttacker.aspect = 'chunyang';
+    const plain = damageOf(plainAttacker, makeMon('dianrong', 8, 1, true, zero), getMove('chunyang-basic-attack-0'), () => 0.5);
+    expect(plain.mult).toBe(1);
+    expect(plain.damage).toBe(9);
+    const yin = makeMon('fengling', 8, 1, true, zero);
+    yin.aspect = 'yinjin';
+    const yang = makeMon('dianrong', 8, 1, true, zero);
+    yang.aspect = 'yangjin';
+    const clash = damageOf(yin, yang, getMove('yinjin-basic-attack-0'), () => 0.5);
+    expect(clash.mult).toBe(1.5);
+    expect(clash.damage).toBe(16);
+    expect(settleDamage((46 * 27 / 60) * 1.2 * 2 * 1.5, 28)).toEqual({ damage: 46, stopped: false });
+    const feed = damageOf(attacker, makeMon('lujiao', 8, 1, true, zero), move, () => 0.5);
+    expect(feed.damage).toBe(1);
+    expect(feed.stopped).toBe(true);
+    const tank = makeMon('yanke', 8, 1, true, zero);
+    tank.stages.def = 3;
+    const blocked = damageOf(attacker, tank, move, () => 0.5);
+    expect(blocked.damage).toBe(1);
+    expect(blocked.stopped).toBe(true);
+    const blockedLog = resolveSkill(blankFighter(attacker), blankFighter(tank), move, () => 0.5);
+    expect(blockedLog.join('')).toContain('没能破开防御');
+    expect(formulas).toContain('样例普通 9');
+    expect(formulas).toContain('样例伤害 21');
+    expect(formulas).toContain('样例伤害低 17');
+    expect(formulas).toContain('样例伤害高 25');
+    expect(formulas).toContain('样例阴阳 16');
+    expect(formulas).toContain('样例同时 46');
+    expect(formulas).toContain('样例未破防 1');
+    expect(formulas).toContain('样例相生伤害 1');
     const strong = makeMon('luzhu', 8, 1, true, { ...zero, str: 31 });
     const mage = makeMon('luzhu', 8, 1, true, { ...zero, int: 31 });
     const magic = getMove('yinshui-basic-attack-1');
-    const fox = makeMon('yanwei', 8, 1, true, zero);
-    expect(damageOf(attacker, fox, move, () => 0.5).damage).toBe(22);
-    expect(damageOf(strong, fox, move, () => 0.5).damage).toBe(31);
-    expect(damageOf(attacker, fox, magic, () => 0.5).damage).toBe(45);
-    expect(damageOf(mage, fox, magic, () => 0.5).damage).toBe(61);
-    expect(formulas).toContain('样例物理 31');
-    expect(formulas).toContain('样例魔法 61');
+    expect(damageOf(attacker, fox, move, () => 0.5).damage).toBe(21);
+    expect(damageOf(strong, fox, move, () => 0.5).damage).toBe(49);
+    expect(damageOf(attacker, fox, magic, () => 0.5).damage).toBe(60);
+    expect(damageOf(mage, fox, magic, () => 0.5).damage).toBe(91);
+    expect(formulas).toContain('样例物理 49');
+    expect(formulas).toContain('样例魔法 91');
 
     const hurt = makeMon('lujiao', 5, 0.4, true, zero);
     expect(hurt.hp).toBe(30);

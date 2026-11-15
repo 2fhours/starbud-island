@@ -126,6 +126,15 @@ export interface DamageResult {
   damage: number;
   mult: number;
   stab: boolean;
+  attackBonus: number;
+  defenseCut: number;
+  stopped: boolean;
+}
+
+export function settleDamage(attackBonus: number, defenseCut: number): { damage: number; stopped: boolean } {
+  const raw = attackBonus - defenseCut;
+  if (raw < 1) return { damage: 1, stopped: true };
+  return { damage: Math.floor(raw), stopped: false };
 }
 
 export function blankFighter(mon: Mon): Fighter {
@@ -199,20 +208,22 @@ export function cycleAspect(mon: Mon): string {
 }
 
 export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random): DamageResult {
-  if (move.power <= 0) return { damage: 0, mult: 1, stab: false };
+  if (move.power <= 0) return { damage: 0, mult: 1, stab: false, attackBonus: 0, defenseCut: 0, stopped: false };
   const mult = relate(move.type, aspectOf(defender)).mult;
   const stab = move.type === aspectOf(attacker);
+  const stabMul = stab ? 1.2 : 1;
   const kind = move.kind === 'magic' ? 'magic' : 'physical';
   const atkProfile = profile(attacker);
   const defProfile = profile(defender);
   const atk = kind === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
   const defStat = kind === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
-  const def = Math.max(1, move.effect === 'pierce' ? defStat * 0.7 : defStat);
+  const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
   const roll = 1 - spread + rng() * spread * 2;
-  const raw = (((2 * attacker.level) / 5 + 2) * move.power * atk) / def / 32 + 2;
-  const damage = Math.max(1, Math.floor(raw * (stab ? 1.2 : 1) * mult * roll));
-  return { damage, mult, stab };
+  const attackBonus = (move.power * atk / 60) * stabMul * mult * roll;
+  const defenseCut = defStat * pierce;
+  const settled = settleDamage(attackBonus, defenseCut);
+  return { damage: settled.damage, mult, stab, attackBonus, defenseCut, stopped: settled.stopped };
 }
 
 export function readDelay(text: string, fast = false): number {
@@ -288,7 +299,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     foe.shield -= absorbed;
     const hpLoss = result.damage - absorbed;
     foe.mon.hp = Math.max(0, foe.mon.hp - hpLoss);
-    logs.push(`造成 ${result.damage} 点伤害${absorbed ? `，护盾挡下 ${absorbed}` : ''}`);
+    const hitLine = result.stopped ? `没能破开防御，造成 ${result.damage} 点伤害` : `造成 ${result.damage} 点伤害`;
+    logs.push(absorbed ? `${hitLine}，护盾挡下 ${absorbed}` : hitLine);
     for (const note of relate(move.type, aspectOf(foe.mon)).notes) logs.push(note);
     if (move.effect === 'recoil' && user.mon.hp > 1) {
       const recoil = Math.max(1, Math.floor(result.damage * 0.1));
