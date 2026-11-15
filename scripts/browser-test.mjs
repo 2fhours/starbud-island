@@ -259,7 +259,7 @@ try {
   await page.click('[data-arg="星旅"]');
   await page.click('[data-act="to-starter"]');
   const starterArt = await page.$$eval('.choice img.standing', (imgs) => imgs.map((img) => img.getAttribute('src')));
-  if (starterArt.length !== 3 || !starterArt.some((src) => src?.includes('/portraits/lujiao.jpg'))) {
+  if (starterArt.length !== 3 || !starterArt.some((src) => src?.includes('/portraits/lujiao-front.jpg'))) {
     throw new Error(`初始选择没有物种立绘 ${JSON.stringify(starterArt)}`);
   }
   await page.click('[data-arg="lujiao"]');
@@ -366,7 +366,7 @@ try {
   await page.waitForSelector('[data-act="encounter-catch"]', { timeout: 4000 });
   await page.waitForFunction(() => {
     const img = document.querySelector('.encounter-sheet img.standing');
-    return !!img && img.complete && img.naturalWidth >= 800;
+    return !!img && img.complete && img.naturalWidth >= 500 && img.naturalWidth * 3 === img.naturalHeight * 2;
   });
   const encounterFit = await page.evaluate(() => {
     const img = document.querySelector('.encounter-sheet img.standing');
@@ -391,7 +391,7 @@ try {
       innerHeight: window.innerHeight,
     };
   });
-  if (encounterFit.tag !== 'IMG' || !String(encounterFit.src).includes('/portraits/yanwei.jpg') || encounterFit.nw < 800 || encounterFit.nh < 1000) {
+  if (encounterFit.tag !== 'IMG' || !String(encounterFit.src).includes('/portraits/yanwei-front.jpg') || encounterFit.nw < 500 || encounterFit.nh < 700 || encounterFit.nw * 3 !== encounterFit.nh * 2) {
     throw new Error(`焰尾狐立绘没有加载 ${JSON.stringify(encounterFit)}`);
   }
   if (encounterFit.rw > 180 || encounterFit.rh > 160 || encounterFit.rw < 24 || !encounterFit.inside) {
@@ -597,6 +597,29 @@ try {
     return { mana: text.includes('法力'), basic: !!basic && !basic.hasAttribute('disabled') };
   });
   if (!battleResources.mana || !battleResources.basic) throw new Error(`战斗没有法力或普通攻击 ${JSON.stringify(battleResources)}`);
+  await page.waitForFunction(() => {
+    const foe = document.querySelector('.battle-stage img.standing');
+    const mine = document.querySelector('.battle-bottom img.standing');
+    return foe && mine && foe.complete && mine.complete && foe.naturalWidth > 0 && mine.naturalWidth > 0;
+  });
+  const battleSides = await page.evaluate(() => {
+    const foe = document.querySelector('.battle-stage img.standing');
+    const mine = document.querySelector('.battle-bottom img.standing');
+    return {
+      foe: foe.getAttribute('src'),
+      mine: mine.getAttribute('src'),
+      foeFace: foe.dataset.facing,
+      mineFace: mine.dataset.facing,
+      foeRatio: foe.naturalWidth * 3 === foe.naturalHeight * 2,
+      mineRatio: mine.naturalWidth * 3 === mine.naturalHeight * 2,
+    };
+  });
+  if (!battleSides.foe?.includes('luzhu-front.jpg') || battleSides.foeFace !== 'front' || !battleSides.foeRatio) {
+    throw new Error(`敌方没有用正面 ${JSON.stringify(battleSides)}`);
+  }
+  if (!battleSides.mine?.includes('lujiao-back.jpg') || battleSides.mineFace !== 'back' || !battleSides.mineRatio) {
+    throw new Error(`我方没有用背面 ${JSON.stringify(battleSides)}`);
+  }
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
@@ -749,7 +772,7 @@ try {
   await page.click('[data-arg="team"]');
   await page.waitForFunction(() => {
     const img = document.querySelector('.mon-card img.standing');
-    return !!img && img.complete && img.naturalWidth >= 800 && (img.getAttribute('src') || '').includes('/portraits/lujiao.jpg');
+    return !!img && img.complete && img.naturalWidth >= 500 && img.naturalWidth * 3 === img.naturalHeight * 2 && (img.getAttribute('src') || '').includes('/portraits/lujiao-front.jpg');
   });
   await page.screenshot({ path: `${shotDir}/07-team.png` });
   const teamStats = await page.evaluate(() => {

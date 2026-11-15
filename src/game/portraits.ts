@@ -23,6 +23,32 @@ export const PORTRAIT_FILES = {
 export type PortraitId = keyof typeof PORTRAIT_FILES;
 export type ActorId = 'player' | 'grandma' | 'qinghe' | 'lanchuan' | 'wushou' | 'shiling';
 export type SpeciesPortraitFit = 'stage' | 'card' | 'detail';
+export type PortraitFacing = 'front' | 'back';
+
+export const SPECIES_PORTRAIT_IDS = [
+  'lujiao',
+  'yanwei',
+  'luzhu',
+  'dianrong',
+  'yanke',
+  'fengling',
+  'taibei',
+  'xiwen',
+  'wudeng',
+  'yunyang',
+  'luoxing',
+  'hanquan',
+] as const satisfies readonly SpeciesId[];
+
+const FACINGS = ['front', 'back'] as const satisfies readonly PortraitFacing[];
+
+export function speciesFacingFile(id: SpeciesId, facing: PortraitFacing): string {
+  return `${id}-${facing}.jpg`;
+}
+
+export function battleFacing(side: 'player' | 'foe'): PortraitFacing {
+  return side === 'player' ? 'back' : 'front';
+}
 
 const ACTOR_LABELS: Record<string, ActorId> = {
   player: 'player',
@@ -38,20 +64,31 @@ const ACTOR_LABELS: Record<string, ActorId> = {
   石岭: 'shiling',
 };
 
-export function portraitSrc(id: PortraitId): string {
+function portraitBase(): string {
   const base = import.meta.env.BASE_URL || '/';
-  const prefix = base.endsWith('/') ? base : `${base}/`;
-  return `${prefix}portraits/${PORTRAIT_FILES[id]}`;
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+export function portraitSrc(id: PortraitId): string {
+  return `${portraitBase()}portraits/${PORTRAIT_FILES[id]}`;
+}
+
+export function speciesFacingSrc(id: SpeciesId, facing: PortraitFacing = 'front'): string {
+  return `${portraitBase()}portraits/${speciesFacingFile(id, facing)}`;
+}
+
+export function speciesFacingFiles(): string[] {
+  return SPECIES_PORTRAIT_IDS.flatMap((id) => FACINGS.map((facing) => speciesFacingFile(id, facing)));
 }
 
 export function actorFor(label: string): ActorId | null {
   return ACTOR_LABELS[label] ?? null;
 }
 
-export function speciesPortraitHtml(id: SpeciesId, fit: SpeciesPortraitFit, faint = false): string {
-  const src = portraitSrc(id);
+export function speciesPortraitHtml(id: SpeciesId, fit: SpeciesPortraitFit, faint = false, facing: PortraitFacing = 'front'): string {
+  const src = speciesFacingSrc(id, facing);
   const fallbackFit = fit === 'stage' ? 'stage' : 'card';
-  return `<span class="portrait-frame portrait-${fit}${faint ? ' is-faint' : ''}"><img class="standing" alt="" draggable="false" src="${src}" data-species="${id}" data-fit="${fallbackFit}" data-faint="${faint ? '1' : '0'}" /></span>`;
+  return `<span class="portrait-frame portrait-${fit}${faint ? ' is-faint' : ''}"><img class="standing" alt="" draggable="false" src="${src}" data-species="${id}" data-facing="${facing}" data-fit="${fallbackFit}" data-faint="${faint ? '1' : '0'}" /></span>`;
 }
 
 export function actorPortraitHtml(id: ActorId, compact = false): string {

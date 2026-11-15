@@ -22,6 +22,13 @@ for (const id of portraits) {
   const file = new URL(`../dist/portraits/${id}.jpg`, import.meta.url);
   if (!fs.existsSync(file)) throw new Error(`dist 缺少立绘 portraits/${id}.jpg`);
 }
+const facings = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'wudeng', 'yunyang', 'luoxing', 'hanquan'];
+for (const id of facings) {
+  for (const side of ['front', 'back']) {
+    const file = new URL(`../dist/portraits/${id}-${side}.jpg`, import.meta.url);
+    if (!fs.existsSync(file)) throw new Error(`dist 缺少立绘 portraits/${id}-${side}.jpg`);
+  }
+}
 if (!main.includes('/starbud-island/') || !main.includes('portraits/')) {
   throw new Error('主脚本没有把立绘挂在 /starbud-island/portraits/ 下');
 }

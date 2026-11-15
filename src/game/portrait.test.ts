@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { APP_VERSION } from '../version';
 import { SPECIES_LIST } from './data';
-import { actorFor, actorPortraitHtml, PORTRAIT_FILES, portraitSrc, speciesPortraitHtml } from './portraits';
+import { actorFor, actorPortraitHtml, battleFacing, PORTRAIT_FILES, portraitSrc, SPECIES_PORTRAIT_IDS, speciesFacingFile, speciesFacingSrc, speciesPortraitHtml } from './portraits';
 import { canvasBitmapSize, MAX_CANVAS_EDGE, PORTRAIT_CSS } from './sprites';
 import { createWorld } from './world';
 
@@ -53,7 +53,8 @@ describe('静态立绘', () => {
     expect(html).toContain('portrait-detail');
     expect(html).toContain('is-faint');
     expect(html).toContain('data-species="yanwei"');
-    expect(html).toContain('portraits/yanwei.jpg');
+    expect(html).toContain('data-facing="front"');
+    expect(html).toContain('portraits/yanwei-front.jpg');
     expect(html).not.toContain('<canvas');
     expect(html).not.toContain('种族');
     expect(html).not.toContain('个体');
@@ -74,11 +75,67 @@ describe('静态立绘', () => {
   });
 });
 
+describe('战斗朝向', () => {
+  it('十二种芽灵都有正面和背面，比例是 2:3', () => {
+    expect(SPECIES_PORTRAIT_IDS).toHaveLength(12);
+    for (const id of SPECIES_PORTRAIT_IDS) {
+      for (const facing of ['front', 'back'] as const) {
+        const name = speciesFacingFile(id, facing);
+        const file = new URL(`../../public/portraits/${name}`, import.meta.url);
+        expect(existsSync(file), name).toBe(true);
+        const size = jpegSize(readFileSync(file));
+        expect(size.w * 3, name).toBe(size.h * 2);
+      }
+      expect(speciesFacingSrc(id, 'front')).toBe(`${import.meta.env.BASE_URL}portraits/${id}-front.jpg`);
+      expect(speciesFacingSrc(id, 'back')).toContain(`/portraits/${id}-back.jpg`);
+      expect(speciesFacingSrc(id, 'back')).not.toContain(`${id}-front.jpg`);
+    }
+  });
+
+  it('我方用背面，敌方用正面，换人后朝向不变', () => {
+    expect(battleFacing('player')).toBe('back');
+    expect(battleFacing('foe')).toBe('front');
+    const mine = speciesPortraitHtml('lujiao', 'card', false, battleFacing('player'));
+    const foe = speciesPortraitHtml('luzhu', 'stage', true, battleFacing('foe'));
+    expect(mine).toContain('lujiao-back.jpg');
+    expect(mine).toContain('data-facing="back"');
+    expect(foe).toContain('luzhu-front.jpg');
+    expect(foe).toContain('data-facing="front"');
+    expect(foe).toContain('is-faint');
+    const switched = speciesPortraitHtml('wudeng', 'card', false, battleFacing('player'));
+    const newFoe = speciesPortraitHtml('lujiao', 'stage', false, battleFacing('foe'));
+    expect(switched).toContain('wudeng-back.jpg');
+    expect(newFoe).toContain('lujiao-front.jpg');
+    expect(switched).not.toContain('scaleX');
+    expect(mine).not.toContain(`${'lujiao'}-front.jpg`);
+  });
+});
+
+function jpegSize(data: Buffer): { w: number; h: number } {
+  let i = 2;
+  while (i < data.length - 8) {
+    if (data[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+    const marker = data[i + 1];
+    if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+      return { h: data.readUInt16BE(i + 5), w: data.readUInt16BE(i + 7) };
+    }
+    if (marker === 0xd8 || marker === 0xd9) {
+      i += 2;
+      continue;
+    }
+    i += 2 + data.readUInt16BE(i + 2);
+  }
+  throw new Error('不是可识别的 JPEG');
+}
+
 describe('版本号', () => {
   it('读取 package.json 的版本，不随刷新变化', () => {
     const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(APP_VERSION).toBe(pkg.version);
-    expect(APP_VERSION).toBe('1.7.0');
+    expect(APP_VERSION).toBe('1.7.1');
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
