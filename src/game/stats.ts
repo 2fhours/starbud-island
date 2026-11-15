@@ -11,6 +11,10 @@ const LEGACY_HP: Record<SpeciesId, number> = {
   fengling: 42,
   taibei: 70,
   xiwen: 54,
+  wudeng: 40,
+  yunyang: 62,
+  luoxing: 42,
+  hanquan: 52,
 };
 
 export function clampStat(n: number, min: number, max: number): number {

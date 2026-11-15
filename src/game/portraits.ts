@@ -10,6 +10,10 @@ export const PORTRAIT_FILES = {
   fengling: 'fengling.jpg',
   taibei: 'taibei.jpg',
   xiwen: 'xiwen.jpg',
+  wudeng: 'wudeng.jpg',
+  yunyang: 'yunyang.jpg',
+  luoxing: 'luoxing.jpg',
+  hanquan: 'hanquan.jpg',
   player: 'player.jpg',
   grandma: 'grandma.jpg',
   qinghe: 'qinghe.jpg',
@@ -17,7 +21,7 @@ export const PORTRAIT_FILES = {
 } as const;
 
 export type PortraitId = keyof typeof PORTRAIT_FILES;
-export type ActorId = 'player' | 'grandma' | 'qinghe' | 'lanchuan';
+export type ActorId = 'player' | 'grandma' | 'qinghe' | 'lanchuan' | 'wushou' | 'shiling';
 export type SpeciesPortraitFit = 'stage' | 'card' | 'detail';
 
 const ACTOR_LABELS: Record<string, ActorId> = {
@@ -28,6 +32,10 @@ const ACTOR_LABELS: Record<string, ActorId> = {
   青禾: 'qinghe',
   lanchuan: 'lanchuan',
   岚川: 'lanchuan',
+  wushou: 'wushou',
+  雾守: 'wushou',
+  shiling: 'shiling',
+  石岭: 'shiling',
 };
 
 export function portraitSrc(id: PortraitId): string {
@@ -47,8 +55,12 @@ export function speciesPortraitHtml(id: SpeciesId, fit: SpeciesPortraitFit, fain
 }
 
 export function actorPortraitHtml(id: ActorId, compact = false): string {
+  const frame = `portrait-frame portrait-actor${compact ? ' compact' : ''}`;
+  if (id === 'wushou' || id === 'shiling') {
+    return `<span class="${frame}"><canvas class="portrait" data-actor="${id}" data-fit="card" width="84" height="112" aria-hidden="true"></canvas></span>`;
+  }
   const src = portraitSrc(id);
-  return `<span class="portrait-frame portrait-actor${compact ? ' compact' : ''}"><img class="standing" alt="" draggable="false" src="${src}" data-actor="${id}" data-fit="card" /></span>`;
+  return `<span class="${frame}"><img class="standing" alt="" draggable="false" src="${src}" data-actor="${id}" data-fit="card" /></span>`;
 }
 
 function swapStanding(img: HTMLImageElement): void {

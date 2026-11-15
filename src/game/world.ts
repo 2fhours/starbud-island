@@ -1,3 +1,5 @@
+import type { MapId, SpeciesId } from './types';
+
 export const COLS = 42;
 export const ROWS = 30;
 export const TILE = 48;
@@ -30,17 +32,32 @@ export interface Prop {
 
 export interface SpawnDef {
   id: string;
-  speciesId: 'lujiao' | 'yanwei' | 'luzhu' | 'dianrong' | 'yanke' | 'fengling' | 'taibei' | 'xiwen';
+  speciesId: SpeciesId;
   level: number;
   x: number;
   y: number;
 }
 
 export interface NpcDef {
-  id: 'grandma' | 'qinghe' | 'lanchuan';
+  id: 'grandma' | 'qinghe' | 'lanchuan' | 'wushou' | 'shiling';
   name: string;
   x: number;
   y: number;
+}
+
+export interface GateDef {
+  id: string;
+  x: number;
+  y: number;
+  edge: 'north' | 'south';
+  kind: 'open' | 'quest' | 'sealed';
+  to: MapId | null;
+  arriveX: number;
+  arriveY: number;
+  promptOpen: string;
+  promptLocked: string;
+  textOpen: string;
+  textLocked: string;
 }
 
 export interface PickupDef {
@@ -59,6 +76,8 @@ export interface SignDef {
 }
 
 export interface World {
+  id: MapId;
+  name: string;
   cols: number;
   rows: number;
   tiles: number[][];
@@ -68,6 +87,7 @@ export interface World {
   npcs: NpcDef[];
   pickups: PickupDef[];
   signs: SignDef[];
+  gates: GateDef[];
   door: { x: number; y: number };
   spawnTile: { x: number; y: number };
   bossTile: { x: number; y: number };
@@ -230,7 +250,7 @@ export function createWorld(): World {
       for (let dx = -3; dx <= 3; dx += 1) {
         const tx = x + dx;
         const ty = y + dy;
-        if (!isWalkable({ cols: COLS, rows: ROWS, tiles, solid, props, spawns: [], npcs: [], pickups: [], signs: [], door, spawnTile: { x: 0, y: 0 }, bossTile: { x: 0, y: 0 } }, tx, ty)) {
+        if (!isWalkable({ id: 'island', name: '星芽岛', cols: COLS, rows: ROWS, tiles, solid, props, spawns: [], npcs: [], pickups: [], signs: [], gates: [], door, spawnTile: { x: 0, y: 0 }, bossTile: { x: 0, y: 0 } }, tx, ty)) {
           if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
           if (tiles[ty][tx] === Tile.Water || tiles[ty][tx] === Tile.Deep || solid[ty][tx]) continue;
         }
@@ -331,7 +351,43 @@ export function createWorld(): World {
     }
   }
 
+  const north = columnEdge(tiles, solid, 20, 'north');
+  const south = columnEdge(tiles, solid, 20, 'south');
+  const northBack = stepFrom(tiles, solid, north.x, north.y, 1);
+  const gates: GateDef[] = [
+    {
+      id: 'island-north',
+      x: north.x,
+      y: north.y,
+      edge: 'north',
+      kind: 'quest',
+      to: 'ridge',
+      arriveX: 20,
+      arriveY: 24,
+      promptOpen: '前往 · 星雾岭',
+      promptLocked: '北岭未开 · 先完成委托',
+      textOpen: '北岭的雾散开了，你走上星雾岭。',
+      textLocked: '芽婆婆的委托还没完成，北岭的路口关着。',
+    },
+    {
+      id: 'island-south',
+      x: south.x,
+      y: south.y,
+      edge: 'south',
+      kind: 'sealed',
+      to: null,
+      arriveX: south.x,
+      arriveY: south.y,
+      promptOpen: '南边未开',
+      promptLocked: '南边未开 · 还是海',
+      textOpen: '南边仍是海，更远的岛还没开放。',
+      textLocked: '南边仍是海，更远的岛还没开放。',
+    },
+  ];
+
   return {
+    id: 'island',
+    name: '星芽岛',
     cols: COLS,
     rows: ROWS,
     tiles,
@@ -341,8 +397,179 @@ export function createWorld(): World {
     npcs,
     pickups,
     signs,
+    gates,
     door,
     spawnTile: { x: 20, y: 18 },
     bossTile: { x: 20, y: 6 },
+    northBack,
+  } as World & { northBack: { x: number; y: number } };
+}
+
+function columnEdge(tiles: number[][], solid: boolean[][], x: number, edge: 'north' | 'south'): { x: number; y: number } {
+  const ys = edge === 'north' ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse();
+  for (const y of ys) {
+    if (walk(tiles, solid, x, y)) return { x, y };
+  }
+  return { x, y: edge === 'north' ? 1 : ROWS - 2 };
+}
+
+function stepFrom(tiles: number[][], solid: boolean[][], x: number, y: number, dir: 1 | -1): { x: number; y: number } {
+  for (let step = 2; step <= 5; step += 1) {
+    const ty = y + dir * step;
+    if (walk(tiles, solid, x, ty)) return { x, y: ty };
+  }
+  const near = y + dir;
+  return walk(tiles, solid, x, near) ? { x, y: near } : { x, y };
+}
+
+function walk(tiles: number[][], solid: boolean[][], x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return false;
+  if (solid[y][x]) return false;
+  return WALK.has(tiles[y][x]);
+}
+
+export function createRidge(): World {
+  const island = createWorld() as World & { northBack: { x: number; y: number } };
+  const back = island.northBack;
+  const tiles: number[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(Tile.Forest));
+  const solid: boolean[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(true));
+  const open = (x: number, y: number, tile: number) => {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    tiles[y][x] = tile;
+    solid[y][x] = false;
   };
+  for (let y = 3; y <= 26; y += 1) {
+    for (let x = 18; x <= 22; x += 1) open(x, y, Tile.Path);
+  }
+  for (let y = 22; y <= 26; y += 1) {
+    for (let x = 15; x <= 25; x += 1) open(x, y, Tile.Plaza);
+  }
+  for (let y = 12; y <= 15; y += 1) {
+    for (let x = 16; x <= 24; x += 1) open(x, y, y === 13 || y === 14 ? Tile.Plaza : Tile.Path);
+  }
+  for (let y = 3; y <= 6; y += 1) {
+    for (let x = 16; x <= 24; x += 1) open(x, y, Tile.Path);
+  }
+  for (let x = 14; x <= 18; x += 1) open(x, 20, Tile.Path);
+  for (let x = 22; x <= 27; x += 1) open(x, 18, Tile.Path);
+  for (let x = 14; x <= 18; x += 1) open(x, 10, Tile.Path);
+  for (let x = 22; x <= 27; x += 1) open(x, 8, Tile.Tall);
+  open(14, 20, Tile.Tall);
+  open(27, 18, Tile.Tall);
+  open(14, 10, Tile.Tall);
+  open(27, 8, Tile.Tall);
+  open(17, 16, Tile.Path);
+  open(16, 16, Tile.Tall);
+  open(23, 16, Tile.Path);
+  open(24, 16, Tile.Grass);
+  open(27, 17, Tile.Path);
+  open(27, 16, Tile.Sand);
+  open(28, 17, Tile.Sand);
+  for (let y = 15; y <= 17; y += 1) {
+    for (let x = 29; x <= 32; x += 1) {
+      tiles[y][x] = Tile.Water;
+      solid[y][x] = true;
+    }
+  }
+  open(28, 16, Tile.Sand);
+  const props: Prop[] = [];
+  for (const [x, y] of [[15, 4], [25, 4], [15, 7], [25, 11], [13, 19], [28, 15]]) {
+    if (!solid[y][x] && tiles[y][x] !== Tile.Water) {
+      solid[y][x] = true;
+      props.push({ kind: 'rock', x, y, variant: 0 });
+    }
+  }
+  for (let y = 4; y < ROWS - 2; y += 2) {
+    for (const x of [12, 30]) {
+      if (tiles[y][x] === Tile.Forest) props.push({ kind: 'tree', x, y, variant: y % 4 === 0 ? 1 : 0 });
+    }
+  }
+  const spawns: SpawnDef[] = [
+    { id: 'ridge-wild-1', speciesId: 'wudeng', level: 8, x: 14, y: 20 },
+    { id: 'ridge-wild-2', speciesId: 'yunyang', level: 9, x: 27, y: 18 },
+    { id: 'ridge-wild-3', speciesId: 'luoxing', level: 10, x: 14, y: 10 },
+    { id: 'ridge-wild-4', speciesId: 'hanquan', level: 11, x: 28, y: 16 },
+    { id: 'ridge-wild-5', speciesId: 'wudeng', level: 12, x: 16, y: 16 },
+    { id: 'ridge-wild-6', speciesId: 'yunyang', level: 8, x: 24, y: 16 },
+    { id: 'ridge-wild-7', speciesId: 'luoxing', level: 11, x: 27, y: 8 },
+    { id: 'ridge-wild-8', speciesId: 'hanquan', level: 12, x: 19, y: 8 },
+  ];
+  const npcs: NpcDef[] = [
+    { id: 'wushou', name: '雾守', x: 18, y: 24 },
+    { id: 'shiling', name: '石岭', x: 22, y: 5 },
+  ];
+  const pickups: PickupDef[] = [
+    { id: 'ridge:camp-balls', x: 16, y: 25, balls: 3 },
+    { id: 'ridge:spring-balls', x: 26, y: 18, balls: 3 },
+  ];
+  const signs: SignDef[] = [
+    { id: 'ridge-south', x: 16, y: 26, title: '岭南台阶', text: '顺着台阶下去，会回到星芽岛的北口。脚下的雾不会把你送回原地。' },
+    { id: 'ridge-north', x: 24, y: 3, title: '北雾', text: '再往北的山路还没开放。牌子后面不是能走的地图。' },
+    { id: 'ridge-spring', x: 27, y: 15, title: '冷泉', text: '寒泉鲵喜欢待在水边。水很凉，不要走进去。' },
+  ];
+  for (const sign of signs) {
+    solid[sign.y][sign.x] = true;
+    tiles[sign.y][sign.x] = Tile.Path;
+  }
+  const gates: GateDef[] = [
+    {
+      id: 'ridge-south',
+      x: 20,
+      y: 26,
+      edge: 'south',
+      kind: 'open',
+      to: 'island',
+      arriveX: back.x,
+      arriveY: back.y,
+      promptOpen: '返回 · 星芽岛',
+      promptLocked: '返回 · 星芽岛',
+      textOpen: '你走下台阶，回到星芽岛的北口。',
+      textLocked: '你走下台阶，回到星芽岛的北口。',
+    },
+    {
+      id: 'ridge-north',
+      x: 20,
+      y: 3,
+      edge: 'north',
+      kind: 'sealed',
+      to: null,
+      arriveX: 20,
+      arriveY: 3,
+      promptOpen: '北雾未开',
+      promptLocked: '北雾未开 · 还没有路',
+      textOpen: '雾还没散，再往北的路还没开放。',
+      textLocked: '雾还没散，再往北的路还没开放。',
+    },
+  ];
+  open(20, 26, Tile.Path);
+  open(20, 3, Tile.Path);
+  open(20, 24, Tile.Plaza);
+  open(20, 23, Tile.Door);
+  return {
+    id: 'ridge',
+    name: '星雾岭',
+    cols: COLS,
+    rows: ROWS,
+    tiles,
+    solid,
+    props,
+    spawns,
+    npcs,
+    pickups,
+    signs,
+    gates,
+    door: { x: 20, y: 23 },
+    spawnTile: { x: 20, y: 24 },
+    bossTile: { x: 22, y: 5 },
+  };
+}
+
+export function worldFor(id: MapId): World {
+  return id === 'ridge' ? createRidge() : createWorld();
+}
+
+export function gateChoice(completed: boolean, gate: GateDef): 'go' | 'stay' {
+  if (gate.kind === 'sealed' || !gate.to) return 'stay';
+  if (gate.kind === 'quest' && !completed) return 'stay';
+  return 'go';
 }

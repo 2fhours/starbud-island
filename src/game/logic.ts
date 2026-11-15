@@ -2,7 +2,7 @@ import { TYPE_META, relate } from './elements';
 import { getMove, skillsOf } from './skills';
 import { getSpecies } from './data';
 import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
-import type { Fighter, Five, Mon, MoveCat, MoveDef, QuestFlags, SpeciesId, Timing, TypeId } from './types';
+import type { Fighter, Five, Mon, MoveCat, MoveDef, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
 import { BALL_TOP_UP, LOADOUT_LIMIT, MAX_LEVEL, TEAM_LIMIT, TIER_LEVEL } from './types';
 
 let uidSeq = 1;
@@ -473,9 +473,9 @@ export function questObjectives(quest: QuestFlags): { title: string; done: boole
 }
 
 export function grandmaFollowup(quest: QuestFlags): string[] {
-  if (quest.completed) return ['最初的委托已经完成了。岛还很大，芽灵也还在散步。'];
+  if (quest.completed) return ['最初的委托已经完成了。岛北的路口现在通往星雾岭。', '再往南仍是海，更远的地方还没开放。'];
   if (quest.caughtWild && quest.bossDefeated) {
-    return ['你做到了。图鉴上有了新名字，北林的试炼也通过了。', '星芽岛没有终点。想继续走的话，湖岸和林子都还空着。'];
+    return ['你做到了。图鉴上有了新名字，北林的试炼也通过了。', '复命之后，岛北的路口会通往星雾岭。南边的海还过不去。'];
   }
   const missing: string[] = [];
   if (!quest.caughtWild) missing.push('还差一只愿意同行的野生芽灵');
@@ -493,7 +493,20 @@ export function emptyDex(): Record<SpeciesId, { seen: boolean; caught: boolean }
     fengling: { seen: false, caught: false },
     taibei: { seen: false, caught: false },
     xiwen: { seen: false, caught: false },
+    wudeng: { seen: false, caught: false },
+    yunyang: { seen: false, caught: false },
+    luoxing: { seen: false, caught: false },
+    hanquan: { seen: false, caught: false },
   };
+}
+
+export function ridgeObjectives(quest: RidgeQuest): Array<{ title: string; done: boolean }> {
+  return [
+    { title: '听雾守说明岭上的路', done: quest.introduced },
+    { title: '在星雾岭收服一只芽灵', done: quest.caught },
+    { title: '通过石岭的试炼', done: quest.trial },
+    { title: '回岭南向雾守复命', done: quest.completed },
+  ];
 }
 
 export function moveByIndex(mon: Mon, index: number): MoveDef {

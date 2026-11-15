@@ -369,7 +369,7 @@ export function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, id:
     orb(ctx, 0, -43, 8.4, 4.8, '#4a342c', '#2a1c18');
     eye(ctx, -3, -38, time, 3, 2);
     eye(ctx, 3, -38, time, 3.2, 2);
-  } else {
+  } else if (id === 'lanchuan') {
     const coat = ctx.createLinearGradient(0, -40, 0, -8);
     coat.addColorStop(0, '#c45a52');
     coat.addColorStop(1, '#6d2e2c');
@@ -383,7 +383,43 @@ export function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, id:
     orb(ctx, 0, -49, 8.4, 4.4, '#3a2a24', '#1c1412');
     eye(ctx, -3, -44, time, 4, 2);
     eye(ctx, 3, -44, time, 4.2, 2);
+  } else if (id === 'wushou') {
+    const robe = ctx.createLinearGradient(0, -32, 0, -6);
+    robe.addColorStop(0, '#d7e7f2');
+    robe.addColorStop(1, '#6d8aa4');
+    ctx.fillStyle = robe;
+    ctx.beginPath();
+    ctx.roundRect(-11, -30, 22, 24, 8);
+    ctx.fill();
+    orb(ctx, 0, -38, 8, 7.4, '#ffe0c8', '#e2b898');
+    orb(ctx, 0, -44, 8, 4, '#f7fbff', '#d5e2ea');
+    eye(ctx, -3, -38, time, 8, 1.8);
+    eye(ctx, 3, -38, time, 8.2, 1.8);
+  } else if (id === 'shiling') {
+    const coat = ctx.createLinearGradient(0, -36, 0, -8);
+    coat.addColorStop(0, '#e7d3b4');
+    coat.addColorStop(1, '#8a6244');
+    ctx.fillStyle = coat;
+    ctx.beginPath();
+    ctx.roundRect(-12, -34, 24, 26, 8);
+    ctx.fill();
+    orb(ctx, 0, -42, 8, 7, '#f6d2b4', '#c9956a');
+    orb(ctx, 0, -48, 8, 4, '#6d5648', '#3c2a22');
+    eye(ctx, -3, -42, time, 9, 1.8);
+    eye(ctx, 3, -42, time, 9.2, 1.8);
   }
+  ctx.restore();
+}
+
+export function drawGate(ctx: CanvasRenderingContext2D, x: number, y: number, open: boolean): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = open ? '#d7e7c8' : '#c4b4a4';
+  ctx.fillRect(-16, -28, 6, 26);
+  ctx.fillRect(10, -28, 6, 26);
+  ctx.fillRect(-16, -32, 32, 6);
+  ctx.fillStyle = open ? '#2f9a5a' : '#8a5a3a';
+  ctx.fillRect(-4, -26, 8, 8);
   ctx.restore();
 }
 
@@ -543,7 +579,80 @@ function drawSpecies(ctx: CanvasRenderingContext2D, id: SpeciesId, time: number)
     orb(ctx, 0, -12, 6, 4, '#fff1e0', '#e7c4a4');
     eye(ctx, -4, -18, time, 10, 2.2);
     eye(ctx, 5, -18, time, 10.4, 2.2);
-  } else {
+  } else if (id === 'wudeng') {
+    orb(ctx, -8, -18, 8, 6, '#d9d3ea', '#8d86b4');
+    orb(ctx, 10, -18, 8, 6, '#ffd0b4', '#e07a4a');
+    orb(ctx, 0, -16, 10, 9, '#f4efe8', '#c8bdd4');
+    orb(ctx, 0, -28, 6, 5, '#fff6ea', '#e7c4a4');
+    ctx.strokeStyle = '#8d86b4';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-2, -32);
+    ctx.quadraticCurveTo(-6, -40, -1, -38);
+    ctx.moveTo(3, -32);
+    ctx.quadraticCurveTo(8, -40, 2, -38);
+    ctx.stroke();
+    eye(ctx, -2, -28, time, 12, 2);
+    eye(ctx, 3, -28, time, 12.4, 2);
+  } else if (id === 'yunyang') {
+    orb(ctx, 0, -14, 16, 11, '#f0d2b0', '#c4894f');
+    orb(ctx, -8, -22, 6, 5, '#fff8ef', '#e7d3b4');
+    orb(ctx, 8, -22, 6, 5, '#fff8ef', '#e7d3b4');
+    ctx.strokeStyle = '#8a5a32';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(-6, -30, 4, Math.PI, 0);
+    ctx.arc(6, -30, 4, Math.PI, 0);
+    ctx.stroke();
+    orb(ctx, 0, -26, 7, 6, '#ffe0c4', '#e2b48a');
+    eye(ctx, -3, -26, time, 13, 2);
+    eye(ctx, 3, -26, time, 13.3, 2);
+  } else if (id === 'luoxing') {
+    ctx.fillStyle = '#6aaa52';
+    ctx.beginPath();
+    ctx.moveTo(-4, -16);
+    ctx.lineTo(-18, -8);
+    ctx.lineTo(-4, -8);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(4, -16);
+    ctx.lineTo(18, -8);
+    ctx.lineTo(4, -8);
+    ctx.fill();
+    orb(ctx, 0, -18, 9, 8, '#e7f0d4', '#8dce78');
+    orb(ctx, 2, -28, 6, 5, '#fff6ea', '#d7c2a4');
+    ctx.fillStyle = '#fff4b0';
+    ctx.beginPath();
+    ctx.moveTo(-14, -6);
+    ctx.lineTo(-10, -12);
+    ctx.lineTo(-8, -4);
+    ctx.lineTo(-16, -8);
+    ctx.closePath();
+    ctx.fill();
+    eye(ctx, 0, -28, time, 14, 2.1);
+    eye(ctx, 4, -28, time, 14.4, 2.1);
+  } else if (id === 'hanquan') {
+    orb(ctx, -6, -10, 14, 6, '#b7e6f6', '#3a8fb8');
+    orb(ctx, 8, -16, 8, 6, '#e7f7ff', '#7ec8ea');
+    ctx.strokeStyle = '#d7f3ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(4, -20);
+    ctx.quadraticCurveTo(0, -30, 6, -28);
+    ctx.moveTo(8, -20);
+    ctx.quadraticCurveTo(14, -30, 10, -26);
+    ctx.stroke();
+    const stripe = ctx.createLinearGradient(-20, -8, -6, -4);
+    stripe.addColorStop(0, '#e7f7ff');
+    stripe.addColorStop(1, '#3a8fb8');
+    ctx.fillStyle = stripe;
+    ctx.beginPath();
+    ctx.moveTo(-8, -10);
+    ctx.quadraticCurveTo(-24, -4 + wag, -16, 2);
+    ctx.quadraticCurveTo(-8, -4, -6, -10);
+    ctx.fill();
+    eye(ctx, 10, -17, time, 15, 2);
+  } else if (id === 'xiwen') {
     orb(ctx, -2, -14, 16, 9, '#c89674', '#7a4e36');
     orb(ctx, -2, -11, 10, 5, '#fff1e0', '#f0d2b4');
     orb(ctx, 12, -22, 7.4, 6.2, '#e2b08a', '#8a5a42');
@@ -565,6 +674,10 @@ function drawSpecies(ctx: CanvasRenderingContext2D, id: SpeciesId, time: number)
     ctx.moveTo(18, -22);
     ctx.lineTo(24, -24);
     ctx.stroke();
+  } else {
+    orb(ctx, 0, -16, 12, 10, '#ffe7c8', '#e7b184');
+    eye(ctx, -3, -18, time, 16, 2);
+    eye(ctx, 3, -18, time, 16.2, 2);
   }
 }
 

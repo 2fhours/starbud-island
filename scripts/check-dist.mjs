@@ -17,7 +17,7 @@ if (main.includes('WebGLRenderer')) throw new Error('2D 首屏不应该打包 3D
 if (!fs.existsSync(new URL('../dist/.nojekyll', import.meta.url))) {
   throw new Error('dist 缺少 .nojekyll');
 }
-const portraits = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'player', 'grandma', 'qinghe', 'lanchuan'];
+const portraits = ['lujiao', 'yanwei', 'luzhu', 'dianrong', 'yanke', 'fengling', 'taibei', 'xiwen', 'wudeng', 'yunyang', 'luoxing', 'hanquan', 'player', 'grandma', 'qinghe', 'lanchuan'];
 for (const id of portraits) {
   const file = new URL(`../dist/portraits/${id}.jpg`, import.meta.url);
   if (!fs.existsSync(file)) throw new Error(`dist 缺少立绘 portraits/${id}.jpg`);

@@ -38,7 +38,13 @@ export type SpeciesId =
   | 'yanke'
   | 'fengling'
   | 'taibei'
-  | 'xiwen';
+  | 'xiwen'
+  | 'wudeng'
+  | 'yunyang'
+  | 'luoxing'
+  | 'hanquan';
+
+export type MapId = 'island' | 'ridge';
 
 export type MoveId = string;
 export type AttackKind = 'physical' | 'magic';
@@ -125,18 +131,27 @@ export interface QuestFlags {
   completed: boolean;
 }
 
+export interface RidgeQuest {
+  introduced: boolean;
+  caught: boolean;
+  trial: boolean;
+  completed: boolean;
+}
+
 export interface PlayState {
   name: string;
   x: number;
   y: number;
   dir: Dir;
+  mapId: MapId;
   team: Mon[];
   box: Mon[];
   dex: Record<SpeciesId, { seen: boolean; caught: boolean }>;
   balls: number;
   quest: QuestFlags;
+  ridgeQuest: RidgeQuest;
   pickups: string[];
-  trainers: { qinghe: boolean; lanchuan: boolean };
+  trainers: { qinghe: boolean; lanchuan: boolean; shiling: boolean };
   playMs: number;
 }
 

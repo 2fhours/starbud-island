@@ -93,6 +93,57 @@ const SPECIES_LIST_RAW: SpeciesDef[] = [
     blurb: '尾巴上有一圈潮水一样的纹。',
     dex: '沿着星湖岸边滑行。纹路会在涨潮的日子变得更亮。',
   },
+  {
+    id: 'wudeng',
+    name: '雾灯蛾',
+    type: 'yinhuo',
+    catchRate: 140,
+    baseExp: 64,
+    race: { con: 44, str: 48, int: 62, spi: 66, spd: 64 },
+    moves: ['yinhuo-basic-attack-0', 'yinhuo-basic-heal-0'],
+    blurb: '翅膀像一盏雾里的小灯。',
+    dex: '星雾岭黄昏才亮起。翅膀外层是冷雾，里面藏着一点阴火，靠近是暖的。',
+  },
+  {
+    id: 'yunyang',
+    name: '云岩羊',
+    type: 'yangtu',
+    catchRate: 125,
+    baseExp: 68,
+    race: { con: 70, str: 64, int: 46, spi: 52, spd: 44 },
+    moves: ['yangtu-basic-attack-0', 'yangtu-basic-guard-0'],
+    blurb: '毛团得像一小朵云。',
+    dex: '走在石阶上的芽灵。角上沾着浅浅的地衣，步伐很稳，不爱乱跑。',
+  },
+  {
+    id: 'luoxing',
+    name: '落星鼯',
+    type: 'yinmu',
+    catchRate: 150,
+    baseExp: 62,
+    race: { con: 46, str: 50, int: 58, spi: 56, spd: 74 },
+    moves: ['yinmu-basic-attack-0', 'yinmu-basic-heal-0'],
+    blurb: '尾巴上有一颗浅色星斑。',
+    dex: '在松枝间滑行。膜翼收起来像一件绿斗篷，星斑只在停下来时看得清。',
+  },
+  {
+    id: 'hanquan',
+    name: '寒泉鲵',
+    type: 'yangshui',
+    catchRate: 135,
+    baseExp: 66,
+    race: { con: 56, str: 48, int: 68, spi: 62, spd: 50 },
+    moves: ['yangshui-basic-attack-0', 'yangshui-basic-heal-0'],
+    blurb: '尾巴上有一道泉纹。',
+    dex: '住在岭上冷泉边。腮羽像两根软绸，喷出的水是凉的。',
+  },
+];
+
+export const RIDGE_SPECIES: SpeciesId[] = ['wudeng', 'yunyang', 'luoxing', 'hanquan'];
+export const RIDGE_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
+  { speciesId: 'wudeng', level: 13 },
+  { speciesId: 'yunyang', level: 14 },
+  { speciesId: 'luoxing', level: 13 },
 ];
 
 export const SPECIES_LIST = SPECIES_LIST_RAW;
