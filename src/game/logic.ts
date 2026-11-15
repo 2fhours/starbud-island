@@ -1,5 +1,5 @@
 import { TYPE_META, relate } from './elements';
-import { getMove, skillsOf } from './skills';
+import { getMove, skillForm, skillsOf } from './skills';
 import { getSpecies } from './data';
 import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
 import type { Fighter, Five, Mon, MoveCat, MoveDef, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
@@ -228,11 +228,11 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   const mult = relate(move.type, aspectOf(defender)).mult;
   const stab = move.type === aspectOf(attacker);
   const stabMul = stab ? 1.2 : 1;
-  const kind = move.kind === 'magic' ? 'magic' : 'physical';
+  const form = skillForm(move);
   const atkProfile = profile(attacker);
   const defProfile = profile(defender);
-  const atk = kind === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
-  const defStat = kind === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
+  const atk = form === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
+  const defStat = form === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
   const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
   const roll = 1 - spread + rng() * spread * 2;

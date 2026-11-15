@@ -163,27 +163,36 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
   return move;
 }
 
-function describe(move: MoveDef): string {
+function lead(move: MoveDef): string {
   const tier = TIER_LABEL[move.tier];
-  const cat = CAT_LABEL[move.cat];
+  const role = CAT_LABEL[move.cat];
+  const form = skillFormLabel(move);
+  return role === form ? `${tier}${role}` : `${tier}${role}。${form}`;
+}
+
+function describe(move: MoveDef): string {
+  const head = lead(move);
   const cool = move.cooldown ? `使用后冷却 ${move.cooldown} 回合。` : '';
   const mana = move.cost > 0 ? `消耗 ${move.cost} 点法力。` : '不消耗法力。';
-  const form = move.kind === 'magic' ? '魔法' : '物理';
+  const use = skillUseLine(move);
   const bump = `${move.bonusPercent ? `伤害提高 ${pct(move.bonusPercent)}%。` : ''}${move.bonusFlat ? `额外增加 ${move.bonusFlat} 点。` : ''}`;
   const soften = `${move.cutPercent ? `受到的伤害降低 ${pct(move.cutPercent)}%。` : ''}${move.cutFlat ? `再减少 ${move.cutFlat} 点。` : ''}`;
-  if (move.effect === 'strike') return `${tier}${cat}。${form}伤害，威力 ${move.power}。${bump}${mana}${cool}`;
-  if (move.effect === 'pierce') return `${tier}${cat}。${form}伤害，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
-  if (move.effect === 'recoil') return `${tier}${cat}。${form}伤害，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${mana}${cool}`;
-  if (move.effect === 'dotstrike') return `${tier}${cat}。${form}伤害，威力 ${move.power}，并在 ${move.turns} 回合内附加持续伤害。${mana}${cool}`;
-  if (move.effect === 'shield') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${mana}${cool}`;
-  if (move.effect === 'ward') return `${tier}${cat}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${soften}${mana}${cool}`;
-  if (move.effect === 'mend') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}%，单次不超过 40%。${mana}${cool}`;
-  if (move.effect === 'hot') return `${tier}${cat}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${mana}${cool}`;
-  if (move.effect === 'cleanse' && move.cat === 'heal') return `${tier}${cat}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
-  if (move.effect === 'cleanse') return `${tier}${cat}。净化一个减益，并提升${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
-  if (move.effect === 'buff') return `${tier}${cat}。提升自己的${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}一阶。${bump}${mana}${cool}`;
-  if (move.effect === 'blight') return `${tier}${cat}。在 ${move.turns} 回合内造成持续伤害，并降低对方${move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击'}。${mana}${cool}`;
-  return `${tier}${cat}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${mana}${cool}`;
+  const stat = move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击';
+  let text = `${head}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${mana}${cool}`;
+  if (move.effect === 'strike') text = `${head}。${use}，威力 ${move.power}。${bump}${mana}${cool}`;
+  else if (move.effect === 'pierce') text = `${head}。${use}，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
+  else if (move.effect === 'recoil') text = `${head}。${use}，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${mana}${cool}`;
+  else if (move.effect === 'dotstrike') text = `${head}。${use}，威力 ${move.power}，并在 ${move.turns} 回合内附加持续伤害。${mana}${cool}`;
+  else if (move.effect === 'shield') text = `${head}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${mana}${cool}`;
+  else if (move.effect === 'ward') text = `${head}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${soften}${mana}${cool}`;
+  else if (move.effect === 'mend') text = `${head}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}%，单次不超过 40%。${mana}${cool}`;
+  else if (move.effect === 'hot') text = `${head}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${mana}${cool}`;
+  else if (move.effect === 'cleanse' && move.cat === 'heal') text = `${head}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
+  else if (move.effect === 'cleanse') text = `${head}。净化一个减益，并提升${stat}。${mana}${cool}`;
+  else if (move.effect === 'buff') text = `${head}。提升自己的${stat}一阶。${bump}${mana}${cool}`;
+  else if (move.effect === 'blight') text = `${head}。在 ${move.turns} 回合内造成持续伤害，并降低对方${stat}。${mana}${cool}`;
+  if (move.id === 'basic-strike') text += '法力不够时也能用。';
+  return text;
 }
 
 function compile(): MoveDef[] {
@@ -200,6 +209,27 @@ function compile(): MoveDef[] {
 
 export const SKILL_LIST: MoveDef[] = compile();
 export const SKILLS: Record<string, MoveDef> = Object.fromEntries(SKILL_LIST.map((move) => [move.id, move]));
+
+export type SkillForm = 'physical' | 'magic' | 'support';
+
+export function skillForm(move: Pick<MoveDef, 'cat' | 'kind' | 'power'>): SkillForm {
+  if (move.cat !== 'attack' || move.power <= 0) return 'support';
+  return move.kind === 'magic' ? 'magic' : 'physical';
+}
+
+export function skillFormLabel(move: Pick<MoveDef, 'cat' | 'kind' | 'power'>): '物理' | '魔法' | '辅助' {
+  const form = skillForm(move);
+  if (form === 'physical') return '物理';
+  if (form === 'magic') return '魔法';
+  return '辅助';
+}
+
+export function skillUseLine(move: Pick<MoveDef, 'cat' | 'kind' | 'power'>): string {
+  const form = skillForm(move);
+  if (form === 'physical') return '以物攻对抗物防';
+  if (form === 'magic') return '以魔攻对抗魔防';
+  return '';
+}
 
 const LEGACY: Record<string, string> = {
   yeren: 'yangmu-basic-attack-0',
@@ -221,7 +251,7 @@ const LEGACY: Record<string, string> = {
 };
 
 export function basicStrike(type: TypeId): MoveDef {
-  return {
+  const move: MoveDef = {
     id: 'basic-strike',
     name: '普通攻击',
     type,
@@ -242,8 +272,10 @@ export function basicStrike(type: TypeId): MoveDef {
     bonusPercent: 0,
     cutFlat: 0,
     cutPercent: 0,
-    desc: '不消耗法力的物理攻击。法力不够时也能用。',
+    desc: '',
   };
+  move.desc = describe(move);
+  return move;
 }
 
 export function getMove(id: string): MoveDef {
