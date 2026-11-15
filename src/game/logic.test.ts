@@ -33,16 +33,18 @@ describe('芽灵与属性', () => {
   });
 
   it('五行相克相生有上限，不会叠成秒杀', () => {
-    expect(effectiveness('yinshui', 'yanghuo')).toBe(1.5);
-    expect(effectiveness('yanghuo', 'yinshui')).toBeLessThan(1);
-    expect(effectiveness('yinshui', 'yangmu')).toBeLessThan(1);
-    expect(effectiveness('chunyang', 'chunyin')).toBeLessThanOrEqual(1.6);
-    expect(effectiveness('chunyang', 'chunyin')).toBeGreaterThan(1);
+    expect(effectiveness('yinshui', 'yanghuo')).toBe(2);
+    expect(effectiveness('yinjin', 'yangjin')).toBe(1.5);
+    expect(effectiveness('yangjin', 'yinjin')).toBe(1.5);
+    expect(effectiveness('yanghuo', 'yinshui')).toBe(0.75);
+    expect(effectiveness('yinshui', 'yangmu')).toBe(0.85);
+    expect(effectiveness('chunyang', 'chunyin')).toBe(1.5);
+    expect(effectiveness('chunyang', 'yinjin')).toBe(1);
     for (const attack of ['yinjin', 'yangmu', 'yinshui', 'yanghuo', 'yintu', 'chunyin', 'chunyang'] as const) {
       for (const defense of ['yinjin', 'yangmu', 'yinshui', 'yanghuo', 'yintu', 'chunyin', 'chunyang'] as const) {
         const value = effectiveness(attack, defense);
-        expect(value).toBeGreaterThanOrEqual(0.7);
-        expect(value).toBeLessThanOrEqual(1.6);
+        expect(value).toBeGreaterThanOrEqual(0.75);
+        expect(value).toBeLessThanOrEqual(2);
       }
     }
   });
@@ -55,7 +57,7 @@ describe('战斗数值', () => {
     const move = getMove(getSpecies('luzhu').moves[0]);
     const superHit = damageOf(attacker, makeMon('yanwei', 8, 1, true, ivs), move, fixed);
     const resist = damageOf(attacker, makeMon('lujiao', 8, 1, true, ivs), move, fixed);
-    expect(superHit.mult).toBe(1.5);
+    expect(superHit.mult).toBe(2);
     expect(resist.mult).toBe(0.85);
     expect(superHit.damage).toBeGreaterThan(resist.damage);
     const bulky = makeMon('yanwei', 8, 1, true, ivs);

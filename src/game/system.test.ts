@@ -44,8 +44,8 @@ describe('十二属性与技能目录', () => {
     const user = makeMon('luzhu', 20, 0.4, true);
     const foe = makeMon('yanwei', 20, 1, true);
     const attack = resolveSkill(blankFighter(user), blankFighter(foe), getMove('yinshui-basic-attack-0'), fixed);
-    expect(attack.join('')).toContain('相克');
-    expect(effectiveness('yinshui', 'yanghuo')).toBe(1.5);
+    expect(attack.join('')).toContain('效果拔群');
+    expect(effectiveness('yinshui', 'yanghuo')).toBe(2);
     const hurt = user.hp;
     const heal = resolveSkill(blankFighter(user), blankFighter(foe), getMove('yinshui-divine-heal-0'), fixed);
     expect(user.hp).toBeGreaterThan(hurt);

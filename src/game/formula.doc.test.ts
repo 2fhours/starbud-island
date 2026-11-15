@@ -52,25 +52,35 @@ describe('设定文档和公式一致', () => {
     expect(stayed.level).toBe(5);
     expect(stayed.exp).toBe(40);
     expect(formulas).toContain('样例经验结余 40');
-    expect(effectiveness('yinshui', 'yanghuo')).toBe(1.5);
-    expect(effectiveness('yanghuo', 'yinshui')).toBe(0.83);
-    expect(effectiveness('yanghuo', 'yinjin')).toBe(1.6);
+    expect(effectiveness('yinshui', 'yanghuo')).toBe(2);
+    expect(effectiveness('yinjin', 'yangjin')).toBe(1.5);
+    expect(effectiveness('yanghuo', 'yinshui')).toBe(0.75);
     expect(effectiveness('yangjin', 'yangjin')).toBe(0.9);
-    expect(formulas).toContain('样例倍率 1.5、0.83、1.6、0.9');
+    expect(formulas).toContain('样例倍率 2、1.5、0.75、0.9');
   });
 
   it('伤害、治疗和护盾样例与代码相同', () => {
     const zero = { con: 0, str: 0, int: 0, spi: 0, spd: 0 };
     const attacker = makeMon('luzhu', 8, 1, true, zero);
     const move = getMove('yinshui-basic-attack-0');
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0.5).damage).toBe(16);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0).damage).toBe(15);
-    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 1).damage).toBe(17);
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0.5).damage).toBe(22);
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 0).damage).toBe(20);
+    expect(damageOf(attacker, makeMon('yanwei', 8, 1, true, zero), move, () => 1).damage).toBe(23);
     expect(damageOf(attacker, makeMon('lujiao', 8, 1, true, zero), move, () => 0.5).damage).toBe(8);
-    expect(formulas).toContain('样例伤害 16');
-    expect(formulas).toContain('样例伤害低 15');
-    expect(formulas).toContain('样例伤害高 17');
+    expect(formulas).toContain('样例伤害 22');
+    expect(formulas).toContain('样例伤害低 20');
+    expect(formulas).toContain('样例伤害高 23');
     expect(formulas).toContain('样例相生伤害 8');
+    const strong = makeMon('luzhu', 8, 1, true, { ...zero, str: 31 });
+    const mage = makeMon('luzhu', 8, 1, true, { ...zero, int: 31 });
+    const magic = getMove('yinshui-basic-attack-1');
+    const fox = makeMon('yanwei', 8, 1, true, zero);
+    expect(damageOf(attacker, fox, move, () => 0.5).damage).toBe(22);
+    expect(damageOf(strong, fox, move, () => 0.5).damage).toBe(31);
+    expect(damageOf(attacker, fox, magic, () => 0.5).damage).toBe(45);
+    expect(damageOf(mage, fox, magic, () => 0.5).damage).toBe(61);
+    expect(formulas).toContain('样例物理 31');
+    expect(formulas).toContain('样例魔法 61');
 
     const hurt = makeMon('lujiao', 5, 0.4, true, zero);
     expect(hurt.hp).toBe(30);
