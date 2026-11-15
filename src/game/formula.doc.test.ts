@@ -28,6 +28,7 @@ const index = readFileSync(new URL('../../docs/design/README.md', import.meta.ur
 
 describe('设定文档和公式一致', () => {
   it('索引能找到三份文档', () => {
+    expect(index).toContain('evolution.md');
     expect(index).toContain('setting.md');
     expect(index).toContain('formulas.md');
     expect(index).toContain('saves.md');

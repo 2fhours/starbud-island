@@ -660,20 +660,22 @@ body:not([data-mode="explore"]) .build-tag {
     height: calc(var(--vvh, 100dvh) - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     max-height: calc(var(--vvh, 100dvh) - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
-  .battle-sheet { display: flex; flex-direction: column; gap: 6px; }
+  .battle-sheet { display: flex; flex-direction: column; gap: 2px; }
   .battle-sheet .sheet-head { display: none; }
   .battle-sheet .sheet-body { display: flex; flex-direction: column; gap: 6px; }
   .battle-sheet .stage { height: auto; min-height: 0; margin: 0; flex: 0 0 auto; padding: 12px 14px; border-radius: 12px; overflow: visible; }
   .battle-stage canvas.portrait-stage,
-  .battle-stage .portrait-frame.portrait-stage { max-height: 64px; height: 64px; width: 42px; }
+  .battle-stage .portrait-frame.portrait-stage { max-height: 48px; height: 48px; width: 32px; }
   .battle-sheet .battle-top h2 { font-size: 15px; line-height: 1.15; margin: 0; }
   .battle-sheet .battle-top .eyebrow,
   .battle-sheet .battle-top small { font-size: 11px; line-height: 1.15; }
   .battle-sheet .battle-top .hp { height: 8px; margin: 2px 0; }
   .battle-sheet .battle-bottom { align-items: center; }
   .battle-sheet .battle-bottom canvas.portrait-card { width: min(56px, 100%); }
-  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 32px; height: 48px; }
-  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 36px minmax(0, 1fr); }
+  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 28px; height: 42px; }
+  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 32px minmax(0, 1fr); }
+  .battle-sheet .moves .btn,
+  .battle-sheet .sheet-foot .actions .btn { min-height: 34px; padding: 4px 8px; font-size: 13px; }
   .battle-sheet .log { flex: 0 0 auto; height: auto; min-height: 28px; max-height: 40px; }
   .talk-row .portrait-actor { width: 72px; height: 96px; }
   .mon-card { grid-template-columns: 80px minmax(0, 1fr); }
@@ -686,8 +688,9 @@ body:not([data-mode="explore"]) .build-tag {
     flex: 0 0 auto;
     overflow: auto;
   }
+  .battle-sheet .battle-bottom { max-height: 42px; }
   .battle-sheet .sheet-body { gap: 0; overflow: hidden; }
-  .battle-sheet .sheet-foot { padding: 4px 12px 8px; }
+  .battle-sheet .sheet-foot { padding: 2px 12px 4px; }
   .battle-sheet .battle-bottom,
   .battle-sheet .actions { flex: 0 0 auto; }
   .battle-sheet .actions { padding-top: 2px; gap: 16px; }
@@ -727,6 +730,7 @@ body:not([data-mode="explore"]) .build-tag {
 }
 
 .filter-row, .type-row, .status-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.evo { margin: 6px 0; line-height: 1.45; overflow-wrap: anywhere; }
 .skill-list { display: flex; flex-direction: column; gap: 8px; }
 .skill-card { display: flex; flex-direction: column; gap: 4px; text-align: left; overflow-wrap: anywhere; background: white; border-radius: 14px; padding: 8px; border: 2px solid transparent; color: inherit; }
 .skill-card.on { border-color: var(--leaf); }

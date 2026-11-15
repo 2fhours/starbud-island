@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { playerMove, prepareBattle } from './battle';
-import { getSpecies, SPECIES_LIST } from './data';
+import { BASE_SPECIES, getSpecies, SPECIES_LIST } from './data';
 import { actionOrder, cloneMon, grantExp, makeMon, maxHp, maxMp, profile, resolveSkill, blankFighter } from './logic';
 import { deserialize } from './save';
 import { basicStrike, getMove } from './skills';
@@ -167,7 +167,7 @@ describe('旧存档迁移', () => {
 
 describe('物种分布和界面', () => {
   it('八种种族值有差别，并且落在同一档', () => {
-    const totals = SPECIES_LIST.map((species) => Object.values(species.race).reduce((sum, value) => sum + value, 0));
+    const totals = SPECIES_LIST.filter((species) => BASE_SPECIES.includes(species.id)).map((species) => Object.values(species.race).reduce((sum, value) => sum + value, 0));
     expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(20);
     const peaks = new Set(SPECIES_LIST.map((species) => Object.entries(species.race).sort((a, b) => b[1] - a[1])[0][0]));
     expect(peaks.size).toBeGreaterThan(2);

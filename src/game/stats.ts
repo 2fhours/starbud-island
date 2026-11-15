@@ -2,7 +2,7 @@ import type { Five, SpeciesId } from './types';
 
 export const IV_MAX = 31;
 
-const LEGACY_HP: Record<SpeciesId, number> = {
+const LEGACY_HP: Partial<Record<SpeciesId, number>> = {
   lujiao: 50,
   yanwei: 44,
   luzhu: 52,
@@ -103,7 +103,7 @@ export function evasionChance(speedPoint: number): number {
 }
 
 export function legacyMaxHp(speciesId: SpeciesId, level: number): number {
-  const base = LEGACY_HP[speciesId];
+  const base = LEGACY_HP[speciesId] ?? 50;
   return Math.floor((base * 2 * level) / 40) + level + 12;
 }
 
