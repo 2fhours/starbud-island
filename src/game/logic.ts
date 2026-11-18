@@ -1,7 +1,7 @@
 import { TYPE_META, relate } from './elements';
 import { getMove, skillForm, skillsOf } from './skills';
 import { getSpecies, SPECIES_LIST } from './data';
-import { AILMENT_LABEL, BURN_PHYS_MUL, PARALYZE_SKIP, ailmentOf, statusLoss, BURN_FRACTION, POISON_FRACTION } from './ailments';
+import { AILMENT_LABEL, PARALYZE_SKIP, ailmentOf, statusLoss, BURN_FRACTION, POISON_FRACTION } from './ailments';
 import { evolutionStatus } from './evolution';
 import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
 import type { Fighter, Five, Mon, MoveCat, MoveDef, PlayState, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
@@ -157,7 +157,7 @@ export function settleDamage(attackBase: number, defenseFlat: number, mods: Stri
 }
 
 export function blankFighter(mon: Mon): Fighter {
-  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, ailment: '', ailmentTurns: 0, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
+  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, ailment: '', ailmentTurns: 0, ailmentChecked: false, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
 }
 
 export function aspectOf(mon: Mon): TypeId {
@@ -234,8 +234,7 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   const form = skillForm(move);
   const atkProfile = profile(attacker);
   const defProfile = profile(defender);
-  const burned = mods.burned && form !== 'magic' ? BURN_PHYS_MUL : 1;
-  const atk = (form === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk)) * burned;
+  const atk = form === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
   const defStat = form === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
   const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
@@ -293,8 +292,9 @@ export function opening(fighter: Fighter, rng: () => number = Math.random): { sk
     fighter.rootTurns = 0;
     return { skip: true, logs: [`${monName(fighter.mon)}还在睡，这回合无法行动`] };
   }
-  if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0 && rng() < PARALYZE_SKIP) {
-    return { skip: true, logs: [`${monName(fighter.mon)}被麻痹，这回合无法行动`] };
+  if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0) {
+    fighter.ailmentChecked = true;
+    if (rng() < PARALYZE_SKIP) return { skip: true, logs: [`${monName(fighter.mon)}被麻痹，这回合无法行动`] };
   }
   return { skip: false, logs: [] };
 }
@@ -390,6 +390,7 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     } else {
       foe.ailment = name;
       foe.ailmentTurns = turns;
+      foe.ailmentChecked = false;
       foe.rootTurns = name === 'sleep' ? 1 : 0;
       if (move.effect === 'blight') {
         const stat = move.stat || 'atk';
@@ -433,8 +434,9 @@ export function tickStatus(fighter: Fighter): string[] {
     logs.push(`${name}受到${label}伤害 ${loss}`);
     if (fighter.ailmentTurns <= 0) fighter.ailment = '';
     if (mon.hp <= 0) logs.push(`${name}失去了战斗能力`);
-  } else if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0) {
+  } else if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0 && fighter.ailmentChecked) {
     fighter.ailmentTurns -= 1;
+    fighter.ailmentChecked = false;
     if (fighter.ailmentTurns <= 0) fighter.ailment = '';
   }
   if (fighter.dotTurns > 0) {

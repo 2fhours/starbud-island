@@ -197,9 +197,9 @@ export const ISLAND_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
 ];
 
 export const RIDGE_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
-  { speciesId: 'wudeng', level: 13 },
-  { speciesId: 'yunyang', level: 14 },
-  { speciesId: 'luoxing', level: 13 },
+  { speciesId: 'wudeng', level: 7 },
+  { speciesId: 'yunyang', level: 7 },
+  { speciesId: 'luoxing', level: 8 },
 ];
 
 export const SPECIES_LIST = [...SPECIES_LIST_RAW, ...evolvedSpecies()];

@@ -1,6 +1,5 @@
 import type { AilmentName, MoveDef } from './types';
 
-export const BURN_PHYS_MUL = 0.85;
 export const PARALYZE_SKIP = 0.25;
 export const BURN_FRACTION = 1 / 16;
 export const POISON_FRACTION = 1 / 12;

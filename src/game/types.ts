@@ -134,6 +134,7 @@ export interface Fighter {
   rootTurns: number;
   ailment: AilmentName;
   ailmentTurns: number;
+  ailmentChecked: boolean;
   bonusFlat: number;
   bonusPercent: number;
   cutFlat: number;

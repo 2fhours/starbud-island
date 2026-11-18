@@ -256,6 +256,35 @@ try {
   if (!afterGesture.unlocked || afterGesture.contexts !== 1 || afterGesture.track !== 'explore' || !afterGesture.scheduling) {
     throw new Error(`点击开始后音乐没有解锁 ${JSON.stringify(afterGesture)}`);
   }
+  if (afterGesture.targets.battle !== 0 || afterGesture.targets.explore <= 0) {
+    throw new Error(`探索时战斗音量线没有关掉 ${JSON.stringify(afterGesture.targets)}`);
+  }
+  const buses = await page.evaluate(() => {
+    const game = window.__xingya;
+    const read = () => {
+      const state = game.audioState;
+      return { track: state.track, contexts: state.contexts, targets: state.targets, scheduling: state.scheduling };
+    };
+    game.audio.sync('explore', 'island');
+    const explore = read();
+    game.audio.sync('battle', 'island');
+    const battle = read();
+    game.audio.sync('explore', 'ridge');
+    const ridge = read();
+    game.audio.sync('explore', 'island');
+    const back = read();
+    return { explore, battle, ridge, back };
+  });
+  const overlapped = [buses.explore, buses.battle, buses.ridge, buses.back].filter((row) => row.targets.explore > 0 && row.targets.battle > 0);
+  if (overlapped.length || buses.explore.contexts !== 1 || buses.battle.contexts !== 1 || buses.ridge.contexts !== 1 || buses.back.contexts !== 1) {
+    throw new Error(`切音乐时两条音量线叠在一起 ${JSON.stringify(buses)}`);
+  }
+  if (buses.explore.track !== 'explore' || buses.explore.targets.battle !== 0 || buses.battle.track !== 'battle' || buses.battle.targets.explore !== 0) {
+    throw new Error(`探索和战斗没有分开 ${JSON.stringify(buses)}`);
+  }
+  if (buses.ridge.track !== 'ridge' || buses.ridge.targets.battle !== 0 || buses.ridge.targets.explore <= 0 || buses.back.track !== 'explore' || buses.back.targets.battle !== 0) {
+    throw new Error(`星雾岭或回到岛上的音乐不对 ${JSON.stringify(buses)}`);
+  }
   await page.click('[data-arg="星旅"]');
   await page.click('[data-act="to-starter"]');
   const starterArt = await page.$$eval('.choice img.standing', (imgs) => imgs.map((img) => img.getAttribute('src')));
@@ -576,6 +605,7 @@ try {
   await page.evaluate(() => {
     const game = window.__xingya;
     const wild = game.wilds.find((item) => item.speciesId === 'luzhu' && !item.hidden);
+    for (const other of game.wilds) if (other !== wild) other.hidden = true;
     wild.mon.hp = 1;
     game.play.x = wild.x;
     game.play.y = wild.y;
@@ -621,6 +651,72 @@ try {
     throw new Error(`我方没有用背面 ${JSON.stringify(battleSides)}`);
   }
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
+  await page.setViewport({ width: 320, height: 568 });
+  await sleep(150);
+  await page.evaluate(() => {
+    window.__xingya.battle.foes[window.__xingya.battle.fIndex].hp = 80;
+  });
+  await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
+  const gestureStart = await page.evaluate(() => {
+    const button = document.querySelector('[data-act="battle-move"]');
+    const box = button.getBoundingClientRect();
+    const battle = window.__xingya.battle;
+    const textSpill = [...document.querySelectorAll('.battle-sheet button')].filter((el) => el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2).map((el) => el.textContent.slice(0, 24));
+    return {
+      x: box.x + Math.min(12, box.width / 2),
+      y: box.y + Math.min(12, box.height / 2),
+      foe: battle.foes[battle.fIndex].hp,
+      mp: battle.player[battle.pIndex].mp,
+      phase: battle.phase,
+      textSpill,
+    };
+  });
+  if (gestureStart.textSpill.length) throw new Error(`320 宽技能按钮文字溢出 ${JSON.stringify(gestureStart.textSpill)}`);
+  await page.mouse.move(gestureStart.x, gestureStart.y);
+  await page.mouse.down();
+  await sleep(620);
+  await page.mouse.up();
+  await page.mouse.move(gestureStart.x, gestureStart.y);
+  await page.mouse.down();
+  await page.mouse.move(gestureStart.x + 30, gestureStart.y, { steps: 5 });
+  await page.mouse.up();
+  await page.evaluate((x, y) => {
+    const button = document.querySelector('[data-act="battle-move"]');
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7 }));
+    button.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, clientX: x, clientY: y, pointerId: 7 }));
+    button.click();
+  }, gestureStart.x, gestureStart.y);
+  const gestureHeld = await page.evaluate(() => {
+    const battle = window.__xingya.battle;
+    return { foe: battle.foes[battle.fIndex].hp, mp: battle.player[battle.pIndex].mp, phase: battle.phase };
+  });
+  if (gestureHeld.foe !== gestureStart.foe || gestureHeld.mp !== gestureStart.mp || gestureHeld.phase !== 'input') {
+    throw new Error(`长按、滑动或取消后仍然出招 ${JSON.stringify(gestureHeld)}`);
+  }
+  await page.evaluate(() => {
+    window.__xingya.rngQueue = Array(16).fill(0.5);
+  });
+  const tapAt = await page.evaluate(() => {
+    const box = document.querySelector('[data-act="battle-move"]').getBoundingClientRect();
+    return { x: box.x + Math.min(12, box.width / 2), y: box.y + Math.min(12, box.height / 2) };
+  });
+  await page.mouse.click(tapAt.x, tapAt.y);
+  await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
+  const afterTap = await page.evaluate(() => window.__xingya.battle.foes[window.__xingya.battle.fIndex].hp);
+  if (afterTap >= gestureStart.foe) throw new Error(`短按没有打出伤害 ${afterTap} / ${gestureStart.foe}`);
+  const beforeKey = afterTap;
+  await page.keyboard.press('Digit1');
+  await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
+  const afterKey = await page.evaluate(() => window.__xingya.battle.foes[window.__xingya.battle.fIndex].hp);
+  if (afterKey >= beforeKey) throw new Error('数字键没有打出伤害');
+  await page.evaluate(() => {
+    const battle = window.__xingya.battle;
+    const me = battle.player[battle.pIndex];
+    me.hp = Math.max(me.hp, 40);
+    battle.foes[battle.fIndex].hp = 40;
+    battle.phase = 'input';
+  });
+  await page.setViewport({ width: 1280, height: 800 });
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
   for (const [width, height] of [[320, 568], [375, 667], [390, 844], [844, 390]]) {
     await page.setViewport({ width, height });
@@ -721,16 +817,17 @@ try {
   await page.evaluate(() => document.body.classList.remove('font-boost'));
   await page.setViewport({ width: 1280, height: 800 });
   if (await page.$('[data-act="log-next"]')) throw new Error('战斗仍显示需要点击的继续按钮');
+  await page.waitForFunction(() => window.__xingya.canAct || window.__xingya.mode !== 'battle', { timeout: 4000 });
   await page.evaluate(() => {
-    window.__xingya.rngQueue = Array(48).fill(0.5);
+    const game = window.__xingya;
+    const battle = game.battle;
+    if (!battle || game.mode !== 'battle') return;
+    battle.player[battle.pIndex].hp = Math.max(20, battle.player[battle.pIndex].hp);
+    battle.foes[battle.fIndex].hp = 1;
+    battle.phase = 'input';
+    game.rngQueue = Array(8).fill(0.5);
+    game.handle('battle-move', '0');
   });
-  for (let i = 0; i < 8; i += 1) {
-    const done = await page.evaluate(() => window.__xingya.mode === 'explore');
-    if (done) break;
-    const button = await page.$('[data-act="battle-move"]:not([disabled]), [data-act="battle-basic"]:not([disabled])');
-    if (button) await button.evaluate((el) => el.click());
-    await sleep(60);
-  }
   await page.waitForFunction(() => window.__xingya.mode === 'explore' && window.__xingya.play.team[0].level >= 5, { timeout: 5000 });
   const afterBattle = await page.evaluate(() => ({
     mode: window.__xingya.mode,
@@ -981,6 +1078,8 @@ try {
   await page.evaluate(() => {
     const game = window.__xingya;
     const wild = game.wilds.find((item) => item.speciesId === 'yanke');
+    for (const other of game.wilds) if (other !== wild) other.hidden = true;
+    wild.hidden = false;
     wild.mon.hp = 500;
     game.play.x = wild.x;
     game.play.y = wild.y;

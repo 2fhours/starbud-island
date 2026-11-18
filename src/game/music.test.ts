@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BATTLE_SCORE, RIDGE_SCORE, clampVolume, EXPLORE_SCORE, midiToFreq, scoreFor, trackForMode, type Score } from './music';
+import { BATTLE_SCORE, RIDGE_SCORE, clampVolume, EXPLORE_SCORE, midiToFreq, musicBusTargets, scoreFor, trackForMode, type Score } from './music';
 
 function assertScore(score: Score): void {
   expect(score.beats).toBeGreaterThan(0);
@@ -36,6 +36,27 @@ describe('背景音乐乐谱', () => {
     expect(scoreFor('ridge').melody[0].midi).not.toBe(BATTLE_SCORE.melody[0].midi);
     expect(RIDGE_SCORE.melody.every((note) => note.vel <= 0.62)).toBe(true);
     expect(Math.max(...RIDGE_SCORE.melody.map((note) => note.vel))).toBeLessThanOrEqual(Math.max(...EXPLORE_SCORE.melody.map((note) => note.vel)));
+  });
+
+  it('探索、战斗和星雾岭不会同时把两条音量线都打开', () => {
+    const sequence = [
+      musicBusTargets('explore', 70),
+      musicBusTargets('battle', 70),
+      musicBusTargets('ridge', 70),
+      musicBusTargets('explore', 70),
+      musicBusTargets('idle', 70),
+      musicBusTargets('battle', 0),
+    ];
+    expect(sequence[0].explore).toBeCloseTo(0.126, 10);
+    expect(sequence[0].battle).toBe(0);
+    expect(sequence[1].explore).toBe(0);
+    expect(sequence[1].battle).toBeCloseTo(0.14, 10);
+    expect(sequence[2].battle).toBe(0);
+    expect(sequence[2].explore).toBeGreaterThan(0);
+    expect(sequence[3].battle).toBe(0);
+    expect(sequence[4]).toEqual({ explore: 0, battle: 0 });
+    expect(sequence[5]).toEqual({ explore: 0, battle: 0 });
+    for (const targets of sequence) expect(targets.explore > 0 && targets.battle > 0).toBe(false);
   });
 
   it('音量被限制在 0 到 100', () => {

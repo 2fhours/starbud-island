@@ -146,6 +146,8 @@ export class Game implements GameHost {
   private stepTile: { x: number; y: number } | null = null;
   private gatherNotice = '';
   private inspectTimer = 0;
+  private inspectX = 0;
+  private inspectY = 0;
   private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
@@ -191,6 +193,7 @@ export class Game implements GameHost {
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('beforeunload', () => this.persist(true));
     this.overlay.addEventListener('pointerdown', (event) => this.onMoveInspect(event));
+    this.overlay.addEventListener('pointermove', (event) => this.onInspectSlide(event));
     this.overlay.addEventListener('pointerup', () => this.cancelInspect(false));
     this.overlay.addEventListener('pointercancel', () => this.cancelInspect(true));
     this.overlay.addEventListener('click', (event) => this.onUiClick(event));
@@ -564,19 +567,24 @@ export class Game implements GameHost {
 
   private touchWilds(): void {
     if (!this.play) return;
+    let nearest: (typeof this.wilds)[number] | null = null;
+    let nearestDist = ENCOUNTER_REACH;
     for (const wild of this.wilds) {
       if (wild.hidden || this.time < wild.ignoreUntil) continue;
-      if (wildDistance(this.play.x, this.play.y, wild.x, wild.y) < ENCOUNTER_REACH) {
-        this.activeWildId = wild.id;
-        this.captureFails = 0;
-        wild.ignoreUntil = this.time + 99;
-        this.markSeen(wild.speciesId);
-        this.mode = 'encounter';
-        this.stopMapDrag();
-        this.refresh();
-        return;
+      const dist = wildDistance(this.play.x, this.play.y, wild.x, wild.y);
+      if (dist < nearestDist) {
+        nearest = wild;
+        nearestDist = dist;
       }
     }
+    if (!nearest) return;
+    this.activeWildId = nearest.id;
+    this.captureFails = 0;
+    nearest.ignoreUntil = this.time + 99;
+    this.markSeen(nearest.speciesId);
+    this.mode = 'encounter';
+    this.stopMapDrag();
+    this.refresh();
   }
 
   private updateCamera(dt: number): void {
@@ -1723,6 +1731,9 @@ export class Game implements GameHost {
     const button = target.closest('[data-act="battle-move"], [data-act="battle-basic"]');
     if (!(button instanceof HTMLElement)) return;
     window.clearTimeout(this.inspectTimer);
+    this.suppressClick = false;
+    this.inspectX = event.clientX;
+    this.inspectY = event.clientY;
     this.inspectTimer = window.setTimeout(() => {
       this.suppressClick = true;
       const mine = this.battle?.player[this.battle.pIndex];
@@ -1735,9 +1746,18 @@ export class Game implements GameHost {
     }, 450);
   }
 
+  private onInspectSlide(event: PointerEvent): void {
+    if (!this.inspectTimer) return;
+    if (Math.hypot(event.clientX - this.inspectX, event.clientY - this.inspectY) <= 12) return;
+    window.clearTimeout(this.inspectTimer);
+    this.inspectTimer = 0;
+    this.suppressClick = true;
+  }
+
   private cancelInspect(cancelled: boolean): void {
     window.clearTimeout(this.inspectTimer);
-    if (cancelled) this.suppressClick = false;
+    this.inspectTimer = 0;
+    if (cancelled) this.suppressClick = true;
   }
 
   private onUiClick(event: Event): void {

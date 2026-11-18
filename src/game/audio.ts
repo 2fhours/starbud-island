@@ -1,4 +1,4 @@
-import { clampVolume, midiToFreq, scoreFor, trackForMode, type Score, type ScoreNote, type TrackName } from './music';
+import { clampVolume, midiToFreq, musicBusTargets, scoreFor, trackForMode, type Score, type ScoreNote, type TrackName } from './music';
 import { MUSIC_ON_KEY, MUSIC_VOL_KEY } from './types';
 
 type ToneName = 'tap' | 'hit' | 'heal' | 'catch' | 'fail' | 'level' | 'menu' | 'win';
@@ -13,6 +13,7 @@ export interface AudioDebug {
   scheduling: boolean;
   live: number;
   state: AudioContextState | 'none';
+  targets: { explore: number; battle: number };
 }
 
 let contextsCreated = 0;
@@ -177,6 +178,7 @@ export class AudioEngine {
       scheduling: this.timer != null,
       live: this.live,
       state: this.ctx?.state ?? 'none',
+      targets: musicBusTargets(this.track, this.musicOn && this.audible ? this.volume : 0),
     };
   }
 
@@ -214,7 +216,8 @@ export class AudioEngine {
 
   private fadeTo(next: TrackName): void {
     if (!this.ctx || !this.exploreBus || !this.battleBus) return;
-    const level = (this.volume / 100) * (next === 'battle' ? 0.2 : 0.18);
+    const targets = musicBusTargets(next, this.volume);
+    const level = next === 'battle' ? targets.battle : targets.explore;
     const changed = this.track !== next || this.appliedLevel !== level;
     if (!changed && this.timer != null) return;
     if (this.track !== next) {
@@ -223,8 +226,8 @@ export class AudioEngine {
     }
     this.track = next;
     this.appliedLevel = level;
-    this.ramp(this.exploreBus, next === 'battle' ? 0 : level, 0.45);
-    this.ramp(this.battleBus, next === 'battle' ? level : 0, 0.45);
+    this.ramp(this.exploreBus, targets.explore, 0.45);
+    this.ramp(this.battleBus, targets.battle, 0.45);
     this.startScheduler();
   }
 
