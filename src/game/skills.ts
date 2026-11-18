@@ -1,3 +1,4 @@
+import { AILMENT_LABEL, ailmentOf } from './ailments';
 import { TYPE_META } from './elements';
 import type { AttackKind, MoveCat, MoveDef, MoveEffect, MoveTier, TypeId } from './types';
 import { CAT_LABEL, TIER_LABEL } from './types';
@@ -178,7 +179,7 @@ function describe(move: MoveDef): string {
   const bump = `${move.bonusPercent ? `伤害提高 ${pct(move.bonusPercent)}%。` : ''}${move.bonusFlat ? `额外增加 ${move.bonusFlat} 点。` : ''}`;
   const soften = `${move.cutPercent ? `受到的伤害降低 ${pct(move.cutPercent)}%。` : ''}${move.cutFlat ? `再减少 ${move.cutFlat} 点。` : ''}`;
   const stat = move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击';
-  let text = `${head}。有 ${pct(move.chance)}% 概率让对方下回合无法行动，不能连续定住。${mana}${cool}`;
+  let text = `${head}。有 ${pct(move.chance)}% 概率让对方睡眠 1 回合。睡着时不能再次催眠。${mana}${cool}`;
   if (move.effect === 'strike') text = `${head}。${use}，威力 ${move.power}。${bump}${mana}${cool}`;
   else if (move.effect === 'pierce') text = `${head}。${use}，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
   else if (move.effect === 'recoil') text = `${head}。${use}，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${mana}${cool}`;
@@ -190,7 +191,10 @@ function describe(move: MoveDef): string {
   else if (move.effect === 'cleanse' && move.cat === 'heal') text = `${head}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
   else if (move.effect === 'cleanse') text = `${head}。净化一个减益，并提升${stat}。${mana}${cool}`;
   else if (move.effect === 'buff') text = `${head}。提升自己的${stat}一阶。${bump}${mana}${cool}`;
-  else if (move.effect === 'blight') text = `${head}。在 ${move.turns} 回合内造成持续伤害，并降低对方${stat}。${mana}${cool}`;
+  else if (move.effect === 'blight') {
+    const label = AILMENT_LABEL[ailmentOf(move) || 'burn'];
+    text = `${head}。造成${label}，持续 ${move.turns} 回合，并降低对方${stat}。相同异常不会叠加。${mana}${cool}`;
+  }
   if (move.id === 'basic-strike') text += '法力不够时也能用。';
   return text;
 }

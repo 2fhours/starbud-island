@@ -1,6 +1,7 @@
 import { TYPE_META, relate } from './elements';
 import { getMove, skillForm, skillsOf } from './skills';
 import { getSpecies, SPECIES_LIST } from './data';
+import { AILMENT_LABEL, BURN_PHYS_MUL, PARALYZE_SKIP, ailmentOf, statusLoss, BURN_FRACTION, POISON_FRACTION } from './ailments';
 import { evolutionStatus } from './evolution';
 import { derive, evasionChance, hitChance, rollIvs, validIvs, ivFromUid } from './stats';
 import type { Fighter, Five, Mon, MoveCat, MoveDef, PlayState, QuestFlags, RidgeQuest, SpeciesId, Timing, TypeId } from './types';
@@ -137,6 +138,7 @@ export interface StrikeMods {
   bonusPercent?: number;
   cutFlat?: number;
   cutPercent?: number;
+  burned?: boolean;
 }
 
 export const BONUS_PERCENT_MAX = 0.5;
@@ -155,7 +157,7 @@ export function settleDamage(attackBase: number, defenseFlat: number, mods: Stri
 }
 
 export function blankFighter(mon: Mon): Fighter {
-  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
+  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, ailment: '', ailmentTurns: 0, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
 }
 
 export function aspectOf(mon: Mon): TypeId {
@@ -232,7 +234,8 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   const form = skillForm(move);
   const atkProfile = profile(attacker);
   const defProfile = profile(defender);
-  const atk = form === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk);
+  const burned = mods.burned && form !== 'magic' ? BURN_PHYS_MUL : 1;
+  const atk = (form === 'magic' ? atkProfile.magAtk : atkProfile.physAtk * stageMul(attacker.stages.atk)) * burned;
   const defStat = form === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
   const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
@@ -268,23 +271,30 @@ function addShield(fighter: Fighter, ratio: number): number {
 
 function cleanse(fighter: Fighter): boolean {
   const mon = fighter.mon;
-  const had = fighter.dotTurns > 0 || fighter.rootTurns > 0 || mon.stages.atk < 0 || mon.stages.def < 0 || mon.stages.spd < 0;
+  const had = fighter.dotTurns > 0 || fighter.rootTurns > 0 || fighter.ailment !== '' || mon.stages.atk < 0 || mon.stages.def < 0 || mon.stages.spd < 0;
   fighter.dotTurns = 0;
   fighter.rootTurns = 0;
+  fighter.ailment = '';
+  fighter.ailmentTurns = 0;
   if (mon.stages.atk < 0) mon.stages.atk = 0;
   if (mon.stages.def < 0) mon.stages.def = 0;
   if (mon.stages.spd < 0) mon.stages.spd = 0;
   return had;
 }
 
-export function opening(fighter: Fighter): { skip: boolean; logs: string[] } {
+export function opening(fighter: Fighter, rng: () => number = Math.random): { skip: boolean; logs: string[] } {
   for (const id of Object.keys(fighter.cd)) {
     fighter.cd[id] -= 1;
     if (fighter.cd[id] <= 0) delete fighter.cd[id];
   }
-  if (fighter.rootTurns > 0) {
+  if (fighter.ailment === 'sleep' && fighter.ailmentTurns > 0) {
+    fighter.ailmentTurns = 0;
+    fighter.ailment = '';
     fighter.rootTurns = 0;
-    return { skip: true, logs: [`${monName(fighter.mon)}被定住，这回合无法行动`] };
+    return { skip: true, logs: [`${monName(fighter.mon)}还在睡，这回合无法行动`] };
+  }
+  if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0 && rng() < PARALYZE_SKIP) {
+    return { skip: true, logs: [`${monName(fighter.mon)}被麻痹，这回合无法行动`] };
   }
   return { skip: false, logs: [] };
 }
@@ -321,6 +331,7 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
       bonusPercent: user.bonusPercent,
       cutFlat: foe.cutFlat,
       cutPercent: foe.cutPercent,
+      burned: user.ailment === 'burn',
     });
     const absorbed = Math.min(foe.shield, result.damage);
     foe.shield -= absorbed;
@@ -368,18 +379,26 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     user.bonusPercent = clamp(user.bonusPercent + move.bonusPercent, 0, BONUS_PERCENT_MAX);
     logs.push(`${an}的${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}上升了`);
     if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
-  } else if (move.effect === 'root') {
-    if (foe.rootTurns > 0) logs.push(`${dn}正在摆脱控制，没有被连续定住`);
-    else if (rng() < move.chance) {
-      foe.rootTurns = 1;
-      logs.push(`${dn}被定住了`);
-    } else logs.push(`${dn}挣开了控制`);
+  } else if (move.effect === 'root' || move.effect === 'blight') {
+    const name = ailmentOf(move);
+    const label = name ? AILMENT_LABEL[name] : '异常';
+    const turns = move.effect === 'root' ? 1 : Math.max(1, move.turns || 2);
+    if (foe.ailment === name && name) {
+      logs.push(`${dn}的${label}还在，没有叠加`);
+    } else if (move.effect === 'root' && rng() >= move.chance) {
+      logs.push(`${dn}挣开了睡眠`);
+    } else {
+      foe.ailment = name;
+      foe.ailmentTurns = turns;
+      foe.rootTurns = name === 'sleep' ? 1 : 0;
+      if (move.effect === 'blight') {
+        const stat = move.stat || 'atk';
+        foe.mon.stages[stat] = clamp(foe.mon.stages[stat] - 1, -3, 3);
+        logs.push(`${dn}${label}了，${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}下降，还要持续 ${turns} 回合`);
+      } else logs.push(`${dn}睡着了，下回合无法行动`);
+    }
   } else {
-    foe.dotTurns = Math.max(foe.dotTurns, move.turns || 2);
-    foe.dotRatio = Math.max(foe.dotRatio, 0.06);
-    const stat = move.stat || 'atk';
-    foe.mon.stages[stat] = clamp(foe.mon.stages[stat] - 1, -3, 3);
-    logs.push(`${dn}陷入持续伤害，${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}下降了`);
+    logs.push(`${an}没有打出效果`);
   }
   if (foe.mon.hp <= 0) logs.push(`${dn}失去了战斗能力`);
   if (move.cooldown > 0) user.cd[move.id] = move.cooldown;
@@ -404,6 +423,19 @@ export function tickStatus(fighter: Fighter): string[] {
     mon.hp += gain;
     fighter.hotTurns -= 1;
     if (gain > 0) logs.push(`${name}持续恢复了 ${gain} 点体力`);
+  }
+  if ((fighter.ailment === 'burn' || fighter.ailment === 'poison') && fighter.ailmentTurns > 0) {
+    const fraction = fighter.ailment === 'burn' ? BURN_FRACTION : POISON_FRACTION;
+    const loss = statusLoss(maxHp(mon), fraction);
+    mon.hp = Math.max(0, mon.hp - loss);
+    fighter.ailmentTurns -= 1;
+    const label = AILMENT_LABEL[fighter.ailment];
+    logs.push(`${name}受到${label}伤害 ${loss}`);
+    if (fighter.ailmentTurns <= 0) fighter.ailment = '';
+    if (mon.hp <= 0) logs.push(`${name}失去了战斗能力`);
+  } else if (fighter.ailment === 'paralyze' && fighter.ailmentTurns > 0) {
+    fighter.ailmentTurns -= 1;
+    if (fighter.ailmentTurns <= 0) fighter.ailment = '';
   }
   if (fighter.dotTurns > 0) {
     const loss = Math.max(1, Math.min(Math.floor(maxHp(mon) * 0.08), Math.floor(maxHp(mon) * Math.max(0.04, fighter.dotRatio))));

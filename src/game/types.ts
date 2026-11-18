@@ -122,6 +122,8 @@ export interface SpeciesDef {
   dex: string;
 }
 
+export type AilmentName = '' | 'burn' | 'poison' | 'paralyze' | 'sleep';
+
 export interface Fighter {
   mon: Mon;
   shield: number;
@@ -130,6 +132,8 @@ export interface Fighter {
   hotTurns: number;
   hotRatio: number;
   rootTurns: number;
+  ailment: AilmentName;
+  ailmentTurns: number;
   bonusFlat: number;
   bonusPercent: number;
   cutFlat: number;

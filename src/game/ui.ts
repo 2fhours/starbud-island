@@ -1,6 +1,7 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
+import { AILMENT_LABEL } from './ailments';
 import { evolutionStatus, ITEM_LABEL } from './evolution';
 import { aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
@@ -251,7 +252,7 @@ function battleSheet(host: GameHost): string {
   const tags = [
     foeState?.shield ? `护盾${foeState.shield}` : '',
     foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
-    foeState?.rootTurns ? '定身' : '',
+    foeState?.ailment ? `${AILMENT_LABEL[foeState.ailment]} ${foeState.ailmentTurns}` : '',
   ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
   const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'))}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0, 'card', battleFacing('player'))}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
