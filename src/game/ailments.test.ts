@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BURN_FRACTION, BURN_PHYS_MUL, PARALYZE_SKIP, POISON_FRACTION, ailmentOf, moveEffectLabel, statusLoss } from './ailments';
+import { BURN_FRACTION, PARALYZE_SKIP, POISON_FRACTION, STATUS_HP_CAP, ailmentOf, moveEffectLabel, statusLoss } from './ailments';
 import { playerMove, prepareBattle } from './battle';
 import { blankFighter, damageOf, makeMon, maxHp, opening, resolveSkill, tickStatus } from './logic';
 import { SKILL_LIST, getMove } from './skills';
@@ -36,10 +36,11 @@ describe('异常状态', () => {
     expect(resolveSkill(user, foe, burn, () => 0.5).join('')).toContain('没有叠加');
   });
 
-  it('灼伤按上限的十六分之一扣血并降低物理伤害，魔法不受这层修正', () => {
+  it('灼伤和中毒只扣体力，攻击下降只来自技能原来的能力阶', () => {
     const mon = makeMon('lujiao', 16, 1, true, zero);
     const cap = maxHp(mon);
-    expect(statusLoss(cap, BURN_FRACTION)).toBe(Math.max(1, Math.min(Math.floor(cap * 0.08), Math.floor(cap * BURN_FRACTION))));
+    expect(statusLoss(cap, BURN_FRACTION)).toBe(Math.max(1, Math.min(Math.floor(cap * STATUS_HP_CAP), Math.floor(cap * BURN_FRACTION))));
+    expect(statusLoss(1000, POISON_FRACTION)).toBe(Math.floor(1000 * STATUS_HP_CAP));
     expect(statusLoss(cap, POISON_FRACTION)).toBeGreaterThan(statusLoss(cap, BURN_FRACTION));
     const fighter = blankFighter(mon);
     fighter.ailment = 'burn';
@@ -48,14 +49,24 @@ describe('异常状态', () => {
     expect(tickStatus(fighter).join('')).toContain('灼伤伤害');
     expect(before - mon.hp).toBe(statusLoss(cap, BURN_FRACTION));
     expect(fighter.ailmentTurns).toBe(1);
+    mon.hp = 1;
+    fighter.ailment = 'burn';
+    fighter.ailmentTurns = 1;
+    tickStatus(fighter);
+    expect(mon.hp).toBe(0);
+    const attacker = makeMon('lujiao', 16, 1, true, zero);
     const foe = makeMon('yanke', 16, 1, true, zero);
     const move = getMove('yangmu-basic-attack-0');
-    const plain = damageOf(mon, foe, move, () => 0.5).damage;
-    const burned = damageOf(mon, foe, move, () => 0.5, { burned: true }).damage;
-    expect(burned).toBeLessThanOrEqual(plain);
-    expect(BURN_PHYS_MUL).toBe(0.85);
+    expect(damageOf(attacker, foe, move, () => 0.5, { burned: true }).damage).toBe(damageOf(attacker, foe, move, () => 0.5).damage);
     const magic = getMove('yangmu-basic-attack-1');
-    expect(damageOf(mon, foe, magic, () => 0.5, { burned: true }).damage).toBe(damageOf(mon, foe, magic, () => 0.5).damage);
+    expect(damageOf(attacker, foe, magic, () => 0.5, { burned: true }).damage).toBe(damageOf(attacker, foe, magic, () => 0.5).damage);
+    const user = blankFighter(attacker);
+    const victim = blankFighter(foe);
+    const burn = SKILL_LIST.find((item) => item.type === 'yangmu' && item.effect === 'blight' && item.stat === 'atk');
+    expect(burn).toBeTruthy();
+    resolveSkill(user, victim, burn!, () => 0.5);
+    expect(victim.ailment).toBe('burn');
+    expect(victim.mon.stages.atk).toBe(-1);
   });
 
   it('睡眠只跳过一次，麻痹按四分之一概率停手，敌方不会重复上同一异常', () => {
@@ -70,6 +81,24 @@ describe('异常状态', () => {
     expect(PARALYZE_SKIP).toBe(0.25);
     expect(opening(numb, () => 0).skip).toBe(true);
     expect(opening(numb, () => 0.9).skip).toBe(false);
+    const fresh = blankFighter(makeMon('luzhu', 10, 1, true, zero));
+    fresh.ailment = 'paralyze';
+    fresh.ailmentTurns = 2;
+    fresh.ailmentChecked = false;
+    tickStatus(fresh);
+    expect(fresh.ailmentTurns).toBe(2);
+    expect(opening(fresh, () => 0.9).skip).toBe(false);
+    tickStatus(fresh);
+    expect(fresh.ailmentTurns).toBe(1);
+    const dirty = blankFighter(makeMon('lujiao', 12, 1, true, zero));
+    dirty.ailment = 'poison';
+    dirty.ailmentTurns = 2;
+    dirty.mon.stages.def = -1;
+    const wash = SKILL_LIST.find((move) => move.effect === 'cleanse' && move.cat === 'heal' && move.type === 'yangmu');
+    expect(wash).toBeTruthy();
+    expect(resolveSkill(dirty, blankFighter(makeMon('yanwei', 12, 1, true, zero)), wash!, () => 0.5).join('')).toContain('净化了减益');
+    expect(dirty.ailment).toBe('');
+    expect(dirty.mon.stages.def).toBe(0);
     const foeMon = makeMon('dianrong', 20, 1, true, zero);
     const player = makeMon('lujiao', 20, 1, true, zero);
     const status = SKILL_LIST.find((move) => move.type === foeMon.aspect && move.effect === 'blight');
@@ -87,5 +116,8 @@ describe('异常状态', () => {
     expect(game).toContain('450');
     expect(game).toContain('suppressClick');
     expect(game).toContain('this.currentLog = move.desc');
+    expect(game).toContain('pointercancel');
+    expect(game).toContain('onInspectSlide');
+    expect(game).toContain('<= 12');
   });
 });

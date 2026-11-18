@@ -107,3 +107,9 @@ export function scoreFor(track: TrackName): Score {
   if (track === 'ridge') return RIDGE_SCORE;
   return EXPLORE_SCORE;
 }
+
+export function musicBusTargets(track: TrackName | 'idle', volume: number): { explore: number; battle: number } {
+  if (track === 'idle' || volume <= 0) return { explore: 0, battle: 0 };
+  const level = (volume / 100) * (track === 'battle' ? 0.2 : 0.18);
+  return { explore: track === 'battle' ? 0 : level, battle: track === 'battle' ? level : 0 };
+}

@@ -61,6 +61,7 @@ function clearBody(battle: Battle, mon: Mon): void {
   fighter.rootTurns = 0;
   fighter.ailment = '';
   fighter.ailmentTurns = 0;
+  fighter.ailmentChecked = false;
   fighter.dotRatio = 0;
   fighter.hotRatio = 0;
   fighter.bonusFlat = 0;
