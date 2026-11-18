@@ -464,6 +464,18 @@ export function formatPlay(ms: number): string {
   return `${m}分${total % 60}秒`;
 }
 
+export function currentObjective(play: PlayState): string {
+  if (!play.quest.introduced) return '先听芽婆婆把委托说完';
+  if (!play.quest.caughtWild) return '去草坡、湖边或苔林收服一只芽灵';
+  if (!play.quest.bossDefeated) return '往北找岚川，通过试炼';
+  if (!play.quest.completed) return '回星芽驿向芽婆婆复命';
+  if (!play.ridgeQuest.introduced) return '岛北进星雾岭，听雾守说明';
+  if (!play.ridgeQuest.caught) return '在星雾岭收服一只芽灵';
+  if (!play.ridgeQuest.trial) return '往北找石岭，通过岭上试炼';
+  if (!play.ridgeQuest.completed) return '回岭南向雾守复命';
+  return '两处委托都完成了';
+}
+
 export function questObjectives(quest: QuestFlags): { title: string; done: boolean }[] {
   return [
     { title: '听芽婆婆讲完出发的委托', done: quest.introduced },

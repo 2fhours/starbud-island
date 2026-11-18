@@ -80,7 +80,14 @@ canvas#view { display: block; width: 100%; height: 100%; touch-action: none; }
   white-space: nowrap;
   max-width: 100%;
 }
-.quest-chip { color: var(--leaf); font-weight: 700; font-size: 0.75rem; }
+.quest-chip {
+  color: var(--leaf);
+  font-weight: 700;
+  font-size: 0.75rem;
+  white-space: normal;
+  line-height: 1.25;
+  max-height: 2.6em;
+}
 .hud-copy strong { font-size: 1rem; }
 canvas.portrait {
   display: block;

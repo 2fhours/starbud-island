@@ -11,6 +11,7 @@ import {
   makeMon,
   maxHp,
   performMove,
+  currentObjective,
   questObjectives,
   receiveMon,
   setLead,
@@ -215,5 +216,21 @@ describe('存档与地图', () => {
     }
     const objectives = questObjectives({ introduced: true, caughtWild: false, bossDefeated: false, completed: false });
     expect(objectives.filter((item) => item.done)).toHaveLength(1);
+  });
+
+  it('探索界面能说出下一步，而不是只写进行中', () => {
+    const play = {
+      quest: { introduced: true, caughtWild: false, bossDefeated: false, completed: false },
+      ridgeQuest: { introduced: false, caught: false, trial: false, completed: false },
+      mapId: 'island',
+    } as PlayState;
+    expect(currentObjective(play)).toContain('收服');
+    play.quest.caughtWild = true;
+    expect(currentObjective(play)).toContain('岚川');
+    play.quest.bossDefeated = true;
+    play.quest.completed = true;
+    expect(currentObjective(play)).toContain('星雾岭');
+    play.ridgeQuest = { introduced: true, caught: true, trial: true, completed: true };
+    expect(currentObjective(play)).toBe('两处委托都完成了');
   });
 });

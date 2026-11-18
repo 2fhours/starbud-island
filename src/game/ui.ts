@@ -2,7 +2,7 @@ import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
 import { evolutionStatus, ITEM_LABEL } from './evolution';
-import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
+import { aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
@@ -374,6 +374,6 @@ export function hudHtml(host: GameHost): string {
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
   const total = SPECIES_LIST.length;
   const mapName = host.play.mapId === 'ridge' ? '星雾岭' : '星芽岛';
-  const quest = host.play.quest.completed ? '<small class="quest-chip">委托完成</small>' : '<small class="quest-chip">委托进行中</small>';
+  const quest = `<small class="quest-chip">${esc(currentObjective(host.play))}</small>`;
   return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(aspectOf(lead))}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong class="map-chip">${mapName}</strong><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/${total}</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }
