@@ -48,7 +48,7 @@ import {
 import type { Dir, Mon, PlayState, SpeciesId } from './types';
 import { DRAG_HINT_KEY, MUTE_KEY, START_BALLS } from './types';
 import { hudHtml, mountTouch, renderOverlay, skillResultsHtml, type CaptureView, type EncounterView, type GameHost } from './ui';
-import { COLS, ROWS, TILE, canWalkPixel, createWorld, gateChoice, tileCenter, worldFor, type GateDef, type NpcDef, type SignDef, type World } from './world';
+import { COLS, ENCOUNTER_REACH, ROWS, TILE, WILD_HOLD, canWalkPixel, createWorld, gateChoice, tileCenter, wildDistance, worldFor, type GateDef, type NpcDef, type SignDef, type World } from './world';
 
 interface Wild {
   id: string;
@@ -544,6 +544,7 @@ export class Game implements GameHost {
         wild.pause = Math.sin(this.time + wild.seed) > 0.2;
       }
       if (wild.pause || this.mode === 'encounter' || this.mode === 'battle' || this.mode === 'capture') continue;
+      if (this.play && wildDistance(this.play.x, this.play.y, wild.x, wild.y) < WILD_HOLD) continue;
       const nx = wild.x + wild.vx * 28 * dt;
       const ny = wild.y + wild.vy * 24 * dt;
       if (Math.hypot(nx - wild.homeX, ny - wild.homeY) < TILE * 2.4 && canWalkPixel(this.world, nx, ny)) {
@@ -558,7 +559,7 @@ export class Game implements GameHost {
     if (!this.play) return;
     for (const wild of this.wilds) {
       if (wild.hidden || this.time < wild.ignoreUntil) continue;
-      if (Math.hypot(this.play.x - wild.x, this.play.y - wild.y) < 30) {
+      if (wildDistance(this.play.x, this.play.y, wild.x, wild.y) < ENCOUNTER_REACH) {
         this.activeWildId = wild.id;
         this.captureFails = 0;
         wild.ignoreUntil = this.time + 99;

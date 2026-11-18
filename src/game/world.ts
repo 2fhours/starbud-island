@@ -3,6 +3,12 @@ import type { MapId, SpeciesId } from './types';
 export const COLS = 42;
 export const ROWS = 30;
 export const TILE = 48;
+export const ENCOUNTER_REACH = 44;
+export const WILD_HOLD = 72;
+
+export function wildDistance(ax: number, ay: number, bx: number, by: number): number {
+  return Math.hypot(ax - bx, ay - by);
+}
 
 export const Tile = {
   Deep: 0,
