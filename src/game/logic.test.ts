@@ -12,6 +12,7 @@ import {
   maxHp,
   performMove,
   currentObjective,
+  grandmaFollowup,
   questObjectives,
   receiveMon,
   setLead,
@@ -232,5 +233,8 @@ describe('存档与地图', () => {
     expect(currentObjective(play)).toContain('星雾岭');
     play.ridgeQuest = { introduced: true, caught: true, trial: true, completed: true };
     expect(currentObjective(play)).toBe('两处委托都完成了');
+    expect(grandmaFollowup(play.quest, true).join('')).toContain('都做完了');
+    expect(grandmaFollowup(play.quest, true).join('')).toContain('进化');
+    expect(grandmaFollowup(play.quest, false).join('')).toContain('星雾岭');
   });
 });

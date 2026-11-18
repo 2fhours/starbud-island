@@ -264,7 +264,7 @@ function npcSheet(host: GameHost): string {
   const play = host.play;
   if (!play || !host.npcId) return '';
   if (host.npcId === 'grandma') {
-    const lines = grandmaFollowup(play.quest);
+    const lines = grandmaFollowup(play.quest, play.ridgeQuest.completed);
     const ready = play.quest.caughtWild && play.quest.bossDefeated && !play.quest.completed;
     return shell('<p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>', talkRow('grandma', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }
@@ -280,7 +280,7 @@ function npcSheet(host: GameHost): string {
     const quest = play.ridgeQuest;
     const ready = quest.caught && quest.trial && !quest.completed;
     const lines = quest.completed
-      ? ['岭上的委托已经做完了。南边台阶回星芽岛，北边的雾还关着。']
+      ? ['岭上的委托已经做完了。南边台阶回星芽岛，北边的雾还关着。', '雾灯蛾要在这岭上才能进入最后的形态。别的芽灵回岛也能进化。']
       : ['我是雾守。星雾岭上的芽灵和岛上的不是同一种。', '先收服一只，再去北面让石岭看看你们。北边的牌子后面没有下一张地图。'];
     return shell('<p class="eyebrow">星雾岭</p><h2>雾守</h2>', talkRow('雾守', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready || quest.completed ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }

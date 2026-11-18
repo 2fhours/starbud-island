@@ -517,8 +517,11 @@ export function questObjectives(quest: QuestFlags): { title: string; done: boole
   ];
 }
 
-export function grandmaFollowup(quest: QuestFlags): string[] {
-  if (quest.completed) return ['最初的委托已经完成了。岛北的路口现在通往星雾岭。', '再往南仍是海，更远的地方还没开放。'];
+export function grandmaFollowup(quest: QuestFlags, ridgeDone = false): string[] {
+  if (quest.completed && ridgeDone) {
+    return ['岛上和岭上的委托都做完了。南边仍是海，岭北的雾也还关着。', '伙伴到了等级，或带上焰心石、清风铃，可以在队伍里进化。进化不会把倒地的伙伴救活。'];
+  }
+  if (quest.completed) return ['最初的委托已经完成了。岛北的路口现在通往星雾岭。', '再往南仍是海，更远的地方还没开放。岭上还有雾守的委托。'];
   if (quest.caughtWild && quest.bossDefeated) {
     return ['你做到了。图鉴上有了新名字，北林的试炼也通过了。', '复命之后，岛北的路口会通往星雾岭。南边的海还过不去。'];
   }

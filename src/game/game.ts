@@ -878,7 +878,7 @@ export class Game implements GameHost {
       this.burst(this.play.x, this.play.y - 30, ['#ef6844', '#f0b429', '#2f9a5a', '#fff']);
       this.audio.play('level');
     }
-    this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest), () => this.persist(false));
+    this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest, this.play.ridgeQuest.completed), () => this.persist(false));
   }
 
   private turnInRidge(): void {
