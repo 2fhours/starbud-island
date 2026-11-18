@@ -6,6 +6,7 @@ import {
   catchProbability,
   cloneMon,
   commitEvolution,
+  currentObjective,
   emptyDex,
   expGain,
   fleeChance,
@@ -1142,7 +1143,7 @@ export class Game implements GameHost {
     this.battle = null;
     this.trainerKey = null;
     if (won) this.audio.play('win');
-    this.openDialogue('对战', [line], () => this.persist(false));
+    this.openDialogue('对战', [line, currentObjective(this.play)], () => this.persist(false));
   }
 
   private applyTrainerReward(name: string): string {
@@ -1192,8 +1193,8 @@ export class Game implements GameHost {
     this.encounterLockUntil = this.time + 1;
     this.audio.play('heal');
     const lines = this.play.mapId === 'ridge'
-      ? ['伙伴们都撑不住了。我把你们接回了岭南营地。', '休息好了再往上走，南边的台阶也能回岛。']
-      : ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。'];
+      ? ['伙伴们都撑不住了。我把你们接回了岭南营地。', '休息好了再往上走，南边的台阶也能回岛。', currentObjective(this.play)]
+      : ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。', currentObjective(this.play)];
     this.openDialogue(this.play.mapId === 'ridge' ? '雾守' : '芽婆婆', lines, () => this.persist(true));
   }
 
