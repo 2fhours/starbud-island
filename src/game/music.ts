@@ -1,4 +1,4 @@
-export type TrackName = 'explore' | 'battle';
+export type TrackName = 'explore' | 'battle' | 'ridge';
 
 export interface ScoreNote {
   beat: number;
@@ -65,8 +65,10 @@ export const BATTLE_SCORE: Score = {
   ]),
 };
 
-export function trackForMode(mode: string): TrackName {
-  return mode === 'battle' ? 'battle' : 'explore';
+export function trackForMode(mode: string, mapId = 'island'): TrackName {
+  if (mode === 'battle') return 'battle';
+  if (mapId === 'ridge') return 'ridge';
+  return 'explore';
 }
 
 export function clampVolume(value: number): number {
@@ -78,6 +80,30 @@ export function midiToFreq(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
 }
 
+/** 原创岭上乐句：D 多利亚，比岛上更慢，音量上限与探索相同。 */
+export const RIDGE_SCORE: Score = {
+  bpm: 66,
+  beats: 16,
+  melody: notes([
+    [0, 62, 1.8, 0.5],
+    [2, 65, 1.2, 0.46],
+    [4, 69, 1.6, 0.52],
+    [6, 67, 1.2, 0.46],
+    [8, 65, 1.8, 0.5],
+    [10, 62, 1.2, 0.44],
+    [12, 60, 1.6, 0.48],
+    [14, 62, 1.4, 0.46],
+  ]),
+  harmony: notes([
+    [0, 50, 4, 0.22],
+    [4, 53, 4, 0.2],
+    [8, 50, 4, 0.22],
+    [12, 48, 4, 0.2],
+  ]),
+};
+
 export function scoreFor(track: TrackName): Score {
-  return track === 'battle' ? BATTLE_SCORE : EXPLORE_SCORE;
+  if (track === 'battle') return BATTLE_SCORE;
+  if (track === 'ridge') return RIDGE_SCORE;
+  return EXPLORE_SCORE;
 }

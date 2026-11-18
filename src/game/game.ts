@@ -452,7 +452,7 @@ export class Game implements GameHost {
     const dt = Math.min(0.033, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
-    this.audio.sync(this.mode);
+    this.audio.sync(this.mode, this.play?.mapId ?? 'island');
     this.update(dt);
     this.render();
     requestAnimationFrame(this.frame);
@@ -1132,8 +1132,10 @@ export class Game implements GameHost {
       const trophy = wild ? this.awardWildItem(wild.speciesId) : '';
       line = trophy ? `野生芽灵退开了。${trophy}` : '野生芽灵退开了。';
     }
+    const won = battle.result === 'win' || battle.result === 'catch';
     this.battle = null;
     this.trainerKey = null;
+    if (won) this.audio.play('win');
     this.openDialogue('对战', [line], () => this.persist(false));
   }
 

@@ -1,7 +1,7 @@
 import { clampVolume, midiToFreq, scoreFor, trackForMode, type Score, type ScoreNote, type TrackName } from './music';
 import { MUSIC_ON_KEY, MUSIC_VOL_KEY } from './types';
 
-type ToneName = 'tap' | 'hit' | 'heal' | 'catch' | 'fail' | 'level' | 'menu';
+type ToneName = 'tap' | 'hit' | 'heal' | 'catch' | 'fail' | 'level' | 'menu' | 'win';
 
 export interface AudioDebug {
   contexts: number;
@@ -51,6 +51,7 @@ export class AudioEngine {
   private audible = true;
   private track: TrackName | 'idle' = 'idle';
   private mode = 'title';
+  private mapId = 'island';
   private timer: number | null = null;
   private cursor = 0;
   private nextBeatTime = 0;
@@ -84,8 +85,9 @@ export class AudioEngine {
     this.sync(this.mode);
   }
 
-  sync(mode: string): void {
+  sync(mode: string, mapId = this.mapId): void {
     this.mode = mode;
+    this.mapId = mapId;
     if (!this.unlocked || !this.audible || !this.musicOn || this.volume <= 0) {
       this.quietMusic();
       return;
@@ -93,7 +95,7 @@ export class AudioEngine {
     const ctx = this.ensure();
     if (!ctx) return;
     if (ctx.state === 'suspended') void ctx.resume();
-    this.fadeTo(trackForMode(mode));
+    this.fadeTo(trackForMode(mode, mapId));
   }
 
   setMusicOn(on: boolean): void {
@@ -153,6 +155,10 @@ export class AudioEngine {
     } else if (name === 'fail') {
       tone(311, 0.12, 'sine', 0.04);
       tone(233, 0.18, 'triangle', 0.035, 0.08);
+    } else if (name === 'win') {
+      tone(523, 0.1, 'sine', 0.04);
+      tone(659, 0.12, 'sine', 0.038, 0.08);
+      tone(784, 0.2, 'triangle', 0.034, 0.16);
     } else {
       tone(494, 0.1, 'sine', 0.04);
       tone(622, 0.12, 'sine', 0.04, 0.09);
@@ -217,7 +223,7 @@ export class AudioEngine {
     }
     this.track = next;
     this.appliedLevel = level;
-    this.ramp(this.exploreBus, next === 'explore' ? level : 0, 0.45);
+    this.ramp(this.exploreBus, next === 'battle' ? 0 : level, 0.45);
     this.ramp(this.battleBus, next === 'battle' ? level : 0, 0.45);
     this.startScheduler();
   }
