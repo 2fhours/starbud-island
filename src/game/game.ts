@@ -1,6 +1,6 @@
 import { AudioEngine } from './audio';
 import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type Battle } from './battle';
-import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getSpecies, introScript, practiceScript } from './data';
+import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getMove, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
   catchProbability,
@@ -24,6 +24,7 @@ import {
   toggleEquip,
   topUpBalls,
 } from './logic';
+import { basicStrike } from './skills';
 import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
@@ -143,6 +144,8 @@ export class Game implements GameHost {
   private saveTimer = 0;
   private stepTile: { x: number; y: number } | null = null;
   private gatherNotice = '';
+  private inspectTimer = 0;
+  private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
   private talkLockId = '';
@@ -186,6 +189,9 @@ export class Game implements GameHost {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('beforeunload', () => this.persist(true));
+    this.overlay.addEventListener('pointerdown', (event) => this.onMoveInspect(event));
+    this.overlay.addEventListener('pointerup', () => this.cancelInspect(false));
+    this.overlay.addEventListener('pointercancel', () => this.cancelInspect(true));
     this.overlay.addEventListener('click', (event) => this.onUiClick(event));
     this.overlay.addEventListener('input', (event) => {
       const target = event.target;
@@ -1710,11 +1716,39 @@ export class Game implements GameHost {
     requestAnimationFrame(() => this.placeChrome());
   }
 
+  private onMoveInspect(event: PointerEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element) || this.mode !== 'battle' || !this.battle) return;
+    const button = target.closest('[data-act="battle-move"], [data-act="battle-basic"]');
+    if (!(button instanceof HTMLElement)) return;
+    window.clearTimeout(this.inspectTimer);
+    this.inspectTimer = window.setTimeout(() => {
+      this.suppressClick = true;
+      const mine = this.battle?.player[this.battle.pIndex];
+      if (!mine) return;
+      const move = button.dataset.act === 'battle-basic'
+        ? basicStrike(mine.aspect ?? 'yangmu')
+        : getMove((mine.moves ?? [])[Number(button.dataset.arg)] ?? '');
+      this.currentLog = move.desc;
+      this.refresh();
+    }, 450);
+  }
+
+  private cancelInspect(cancelled: boolean): void {
+    window.clearTimeout(this.inspectTimer);
+    if (cancelled) this.suppressClick = false;
+  }
+
   private onUiClick(event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest('[data-act]');
     if (!(button instanceof HTMLElement)) return;
+    if (this.suppressClick && (button.dataset.act === 'battle-move' || button.dataset.act === 'battle-basic')) {
+      this.suppressClick = false;
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     this.handle(button.dataset.act ?? '', button.dataset.arg);
   }

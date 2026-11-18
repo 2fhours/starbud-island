@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BURN_FRACTION, BURN_PHYS_MUL, PARALYZE_SKIP, POISON_FRACTION, ailmentOf, statusLoss } from './ailments';
 import { playerMove, prepareBattle } from './battle';
@@ -76,5 +77,12 @@ describe('异常状态', () => {
     battle.runtime[player.uid].ailmentTurns = 2;
     const logs = playerMove(battle, 0, () => 0.5);
     expect(logs.join('')).not.toContain('没有叠加');
+  });
+
+  it('长按战斗按钮只看说明，不把点击直接变成出招', () => {
+    const game = readFileSync(new URL('./game.ts', import.meta.url), 'utf8');
+    expect(game).toContain('450');
+    expect(game).toContain('suppressClick');
+    expect(game).toContain('this.currentLog = move.desc');
   });
 });
