@@ -999,7 +999,7 @@ try {
     effectLogs.push(await page.$eval('.log', (el) => el.textContent));
   }
   const joined = effectLogs.join('\n');
-  if (!/伤害|护盾|恢复|持续|定住|上升/.test(joined)) throw new Error(`五类技能没有打出可见效果 ${joined}`);
+  if (!/伤害|护盾|恢复|持续|睡|上升|灼伤|中毒|麻痹/.test(joined)) throw new Error(`五类技能没有打出可见效果 ${joined}`);
   const saveBeforePreview = await page.evaluate(() => localStorage.getItem('xingya-island-save-v1'));
   for (const file of ['iso.html', 'view3d.html']) {
     const previewPage = await browser.newPage();

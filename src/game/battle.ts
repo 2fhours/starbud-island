@@ -1,5 +1,6 @@
 import { getSpecies } from './data';
 import { effectiveness } from './elements';
+import { ailmentOf } from './ailments';
 import { basicStrike } from './skills';
 import {
   actionOrder,
@@ -58,6 +59,8 @@ function clearBody(battle: Battle, mon: Mon): void {
   fighter.dotTurns = 0;
   fighter.hotTurns = 0;
   fighter.rootTurns = 0;
+  fighter.ailment = '';
+  fighter.ailmentTurns = 0;
   fighter.dotRatio = 0;
   fighter.hotRatio = 0;
   fighter.bonusFlat = 0;
@@ -118,7 +121,11 @@ function chooseEnemyMove(battle: Battle): number {
     if (move.cat === 'heal') score = attacker.hp <= Math.ceil(maxHp(attacker) * 0.45) ? 80 : 6;
     else if (move.cat === 'guard') score = side(battle, attacker).shield > maxHp(attacker) * 0.2 ? 4 : 36;
     else if (move.cat === 'aid') score = 28;
-    else if (move.cat === 'status') score = side(battle, defender).rootTurns > 0 && move.effect === 'root' ? 2 : 34;
+    else if (move.cat === 'status') {
+      const already = side(battle, defender).ailment;
+      const next = ailmentOf(move);
+      score = already && already === next ? 1 : 34;
+    }
     else score = Math.max(1, move.power) * effectiveness(move.type, defType);
     if (score > bestScore) {
       bestScore = score;
@@ -131,7 +138,7 @@ function chooseEnemyMove(battle: Battle): number {
 function act(battle: Battle, actor: Mon, target: Mon, moveIndex: number, rng: () => number): string[] {
   const user = side(battle, actor);
   const other = side(battle, target);
-  const open = opening(user);
+  const open = opening(user, rng);
   if (open.skip) return open.logs;
   const move = moveIndex < 0 ? basicStrike(aspectOf(actor)) : moveByIndex(actor, moveIndex);
   return resolveSkill(user, other, move, rng);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BATTLE_SCORE, clampVolume, EXPLORE_SCORE, midiToFreq, trackForMode, type Score } from './music';
+import { BATTLE_SCORE, RIDGE_SCORE, clampVolume, EXPLORE_SCORE, midiToFreq, scoreFor, trackForMode, type Score } from './music';
 
 function assertScore(score: Score): void {
   expect(score.beats).toBeGreaterThan(0);
@@ -27,9 +27,15 @@ describe('背景音乐乐谱', () => {
 
   it('只有对战模式切到战斗音乐', () => {
     expect(trackForMode('battle')).toBe('battle');
+    expect(trackForMode('battle', 'ridge')).toBe('battle');
     expect(trackForMode('explore')).toBe('explore');
+    expect(trackForMode('explore', 'ridge')).toBe('ridge');
     expect(trackForMode('encounter')).toBe('explore');
     expect(trackForMode('title')).toBe('explore');
+    expect(scoreFor('ridge').melody[0].midi).not.toBe(EXPLORE_SCORE.melody[0].midi);
+    expect(scoreFor('ridge').melody[0].midi).not.toBe(BATTLE_SCORE.melody[0].midi);
+    expect(RIDGE_SCORE.melody.every((note) => note.vel <= 0.62)).toBe(true);
+    expect(Math.max(...RIDGE_SCORE.melody.map((note) => note.vel))).toBeLessThanOrEqual(Math.max(...EXPLORE_SCORE.melody.map((note) => note.vel)));
   });
 
   it('音量被限制在 0 到 100', () => {

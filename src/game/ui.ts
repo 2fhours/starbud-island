@@ -1,8 +1,9 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
+import { AILMENT_LABEL, moveEffectLabel } from './ailments';
 import { evolutionStatus, ITEM_LABEL } from './evolution';
-import { aspectOf, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
+import { aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
@@ -10,7 +11,9 @@ import type { MoveCat, MoveDef, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
 function formMark(move: MoveDef): string {
-  return `<span class="move-form">${skillFormLabel(move)}</span>`;
+  const effect = moveEffectLabel(move);
+  const text = effect ? `${skillFormLabel(move)}·${effect}` : skillFormLabel(move);
+  return `<span class="move-form">${text}</span>`;
 }
 
 function moveFacts(move: MoveDef): string {
@@ -251,7 +254,7 @@ function battleSheet(host: GameHost): string {
   const tags = [
     foeState?.shield ? `护盾${foeState.shield}` : '',
     foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
-    foeState?.rootTurns ? '定身' : '',
+    foeState?.ailment ? `${AILMENT_LABEL[foeState.ailment]} ${foeState.ailmentTurns}` : '',
   ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
   const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'))}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0, 'card', battleFacing('player'))}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
@@ -261,7 +264,7 @@ function npcSheet(host: GameHost): string {
   const play = host.play;
   if (!play || !host.npcId) return '';
   if (host.npcId === 'grandma') {
-    const lines = grandmaFollowup(play.quest);
+    const lines = grandmaFollowup(play.quest, play.ridgeQuest.completed);
     const ready = play.quest.caughtWild && play.quest.bossDefeated && !play.quest.completed;
     return shell('<p class="eyebrow">星芽驿</p><h2>芽婆婆</h2>', talkRow('grandma', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }
@@ -277,7 +280,7 @@ function npcSheet(host: GameHost): string {
     const quest = play.ridgeQuest;
     const ready = quest.caught && quest.trial && !quest.completed;
     const lines = quest.completed
-      ? ['岭上的委托已经做完了。南边台阶回星芽岛，北边的雾还关着。']
+      ? ['岭上的委托已经做完了。南边台阶回星芽岛，北边的雾还关着。', '雾灯蛾要在这岭上才能进入最后的形态。别的芽灵回岛也能进化。']
       : ['我是雾守。星雾岭上的芽灵和岛上的不是同一种。', '先收服一只，再去北面让石岭看看你们。北边的牌子后面没有下一张地图。'];
     return shell('<p class="eyebrow">星雾岭</p><h2>雾守</h2>', talkRow('雾守', lines.map((line) => `<p>${esc(line)}</p>`).join('')), `<div class="stack"><button class="btn leaf" data-act="npc-heal">休息治疗</button>${ready || quest.completed ? '<button class="btn" data-act="npc-quest">向她复命</button>' : '<button class="btn secondary" data-act="npc-quest">再说说委托</button>'}<button class="texty" data-act="close">离开</button></div>`);
   }
@@ -374,6 +377,6 @@ export function hudHtml(host: GameHost): string {
   const caught = Object.values(host.play.dex).filter((entry) => entry.caught).length;
   const total = SPECIES_LIST.length;
   const mapName = host.play.mapId === 'ridge' ? '星雾岭' : '星芽岛';
-  const quest = host.play.quest.completed ? '<small class="quest-chip">委托完成</small>' : '<small class="quest-chip">委托进行中</small>';
+  const quest = `<small class="quest-chip">${esc(currentObjective(host.play))}</small>`;
   return `<div class="hud-left"><div class="hud-portrait">${portrait(lead.speciesId, lead.hp <= 0, 'hud')}</div><div class="hud-copy"><strong>${esc(species.name)}</strong><span>${lead.level} 级 ${typePill(aspectOf(lead))}</span>${hpMarkup(lead.hp, maxHp(lead))}${quest}</div></div><div class="hud-right"><strong class="map-chip">${mapName}</strong><strong>星芽球 ${host.play.balls}</strong><span>图鉴 ${caught}/${total}</span><div class="row"><button class="btn tiny secondary" data-act="mute">${host.muted ? '音效关' : '音效开'}</button><button class="btn tiny" data-act="menu">菜单</button></div></div><div class="hint">WASD / 方向键移动 · E 交谈 · Esc 菜单</div>${host.nearbyLabel ? `<button class="prompt btn" data-act="interact">${esc(host.nearbyLabel)}</button>` : ''}<p class="fine" style="position:absolute;left:-999px">已游玩 ${formatPlay(host.play.playMs)}</p>`;
 }

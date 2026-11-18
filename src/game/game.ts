@@ -1,11 +1,12 @@
 import { AudioEngine } from './audio';
 import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type Battle } from './battle';
-import { RIDGE_TRIAL, bossScript, getSpecies, introScript, practiceScript } from './data';
+import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getMove, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
   catchProbability,
   cloneMon,
   commitEvolution,
+  currentObjective,
   emptyDex,
   expGain,
   fleeChance,
@@ -24,6 +25,7 @@ import {
   toggleEquip,
   topUpBalls,
 } from './logic';
+import { basicStrike } from './skills';
 import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
@@ -48,7 +50,7 @@ import {
 import type { Dir, Mon, PlayState, SpeciesId } from './types';
 import { DRAG_HINT_KEY, MUTE_KEY, START_BALLS } from './types';
 import { hudHtml, mountTouch, renderOverlay, skillResultsHtml, type CaptureView, type EncounterView, type GameHost } from './ui';
-import { COLS, ROWS, TILE, canWalkPixel, createWorld, gateChoice, tileCenter, worldFor, type GateDef, type NpcDef, type SignDef, type World } from './world';
+import { COLS, ENCOUNTER_REACH, ROWS, TILE, WILD_HOLD, canWalkPixel, createWorld, gateChoice, tileCenter, wildDistance, worldFor, type GateDef, type NpcDef, type SignDef, type World } from './world';
 
 interface Wild {
   id: string;
@@ -143,6 +145,8 @@ export class Game implements GameHost {
   private saveTimer = 0;
   private stepTile: { x: number; y: number } | null = null;
   private gatherNotice = '';
+  private inspectTimer = 0;
+  private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
   private talkLockId = '';
@@ -186,6 +190,9 @@ export class Game implements GameHost {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('beforeunload', () => this.persist(true));
+    this.overlay.addEventListener('pointerdown', (event) => this.onMoveInspect(event));
+    this.overlay.addEventListener('pointerup', () => this.cancelInspect(false));
+    this.overlay.addEventListener('pointercancel', () => this.cancelInspect(true));
     this.overlay.addEventListener('click', (event) => this.onUiClick(event));
     this.overlay.addEventListener('input', (event) => {
       const target = event.target;
@@ -452,7 +459,7 @@ export class Game implements GameHost {
     const dt = Math.min(0.033, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
-    this.audio.sync(this.mode);
+    this.audio.sync(this.mode, this.play?.mapId ?? 'island');
     this.update(dt);
     this.render();
     requestAnimationFrame(this.frame);
@@ -544,6 +551,7 @@ export class Game implements GameHost {
         wild.pause = Math.sin(this.time + wild.seed) > 0.2;
       }
       if (wild.pause || this.mode === 'encounter' || this.mode === 'battle' || this.mode === 'capture') continue;
+      if (this.play && wildDistance(this.play.x, this.play.y, wild.x, wild.y) < WILD_HOLD) continue;
       const nx = wild.x + wild.vx * 28 * dt;
       const ny = wild.y + wild.vy * 24 * dt;
       if (Math.hypot(nx - wild.homeX, ny - wild.homeY) < TILE * 2.4 && canWalkPixel(this.world, nx, ny)) {
@@ -558,7 +566,7 @@ export class Game implements GameHost {
     if (!this.play) return;
     for (const wild of this.wilds) {
       if (wild.hidden || this.time < wild.ignoreUntil) continue;
-      if (Math.hypot(this.play.x - wild.x, this.play.y - wild.y) < 30) {
+      if (wildDistance(this.play.x, this.play.y, wild.x, wild.y) < ENCOUNTER_REACH) {
         this.activeWildId = wild.id;
         this.captureFails = 0;
         wild.ignoreUntil = this.time + 99;
@@ -871,7 +879,7 @@ export class Game implements GameHost {
       this.burst(this.play.x, this.play.y - 30, ['#ef6844', '#f0b429', '#2f9a5a', '#fff']);
       this.audio.play('level');
     }
-    this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest), () => this.persist(false));
+    this.openDialogue('芽婆婆', grandmaFollowup(this.play.quest, this.play.ridgeQuest.completed), () => this.persist(false));
   }
 
   private turnInRidge(): void {
@@ -954,7 +962,7 @@ export class Game implements GameHost {
     }
     if (this.npcId !== 'lanchuan') return;
     this.trainerKey = 'lanchuan';
-    this.battle = prepareBattle(this.play.team, [makeMon('yanwei', 7), makeMon('yanke', 8), makeMon('dianrong', 7)], 'trainer', '岚川');
+      this.battle = prepareBattle(this.play.team, ISLAND_TRIAL.map((entry) => makeMon(entry.speciesId, entry.level)), 'trainer', '岚川');
     this.mode = 'battle';
     this.beginLogs([bossScript(false)[0].text, '岚川派出了焰尾狐'], () => undefined);
   }
@@ -1131,9 +1139,11 @@ export class Game implements GameHost {
       const trophy = wild ? this.awardWildItem(wild.speciesId) : '';
       line = trophy ? `野生芽灵退开了。${trophy}` : '野生芽灵退开了。';
     }
+    const won = battle.result === 'win' || battle.result === 'catch';
     this.battle = null;
     this.trainerKey = null;
-    this.openDialogue('对战', [line], () => this.persist(false));
+    if (won) this.audio.play('win');
+    this.openDialogue('对战', [line, currentObjective(this.play)], () => this.persist(false));
   }
 
   private applyTrainerReward(name: string): string {
@@ -1183,8 +1193,8 @@ export class Game implements GameHost {
     this.encounterLockUntil = this.time + 1;
     this.audio.play('heal');
     const lines = this.play.mapId === 'ridge'
-      ? ['伙伴们都撑不住了。我把你们接回了岭南营地。', '休息好了再往上走，南边的台阶也能回岛。']
-      : ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。'];
+      ? ['伙伴们都撑不住了。我把你们接回了岭南营地。', '休息好了再往上走，南边的台阶也能回岛。', currentObjective(this.play)]
+      : ['伙伴们都撑不住了。我把你们接回了星芽驿。', '休息好了再出发就行，星芽球也帮你补上了。', currentObjective(this.play)];
     this.openDialogue(this.play.mapId === 'ridge' ? '雾守' : '芽婆婆', lines, () => this.persist(true));
   }
 
@@ -1707,11 +1717,39 @@ export class Game implements GameHost {
     requestAnimationFrame(() => this.placeChrome());
   }
 
+  private onMoveInspect(event: PointerEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element) || this.mode !== 'battle' || !this.battle) return;
+    const button = target.closest('[data-act="battle-move"], [data-act="battle-basic"]');
+    if (!(button instanceof HTMLElement)) return;
+    window.clearTimeout(this.inspectTimer);
+    this.inspectTimer = window.setTimeout(() => {
+      this.suppressClick = true;
+      const mine = this.battle?.player[this.battle.pIndex];
+      if (!mine) return;
+      const move = button.dataset.act === 'battle-basic'
+        ? basicStrike(mine.aspect ?? 'yangmu')
+        : getMove((mine.moves ?? [])[Number(button.dataset.arg)] ?? '');
+      this.currentLog = move.desc;
+      this.refresh();
+    }, 450);
+  }
+
+  private cancelInspect(cancelled: boolean): void {
+    window.clearTimeout(this.inspectTimer);
+    if (cancelled) this.suppressClick = false;
+  }
+
   private onUiClick(event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest('[data-act]');
     if (!(button instanceof HTMLElement)) return;
+    if (this.suppressClick && (button.dataset.act === 'battle-move' || button.dataset.act === 'battle-basic')) {
+      this.suppressClick = false;
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     this.handle(button.dataset.act ?? '', button.dataset.arg);
   }

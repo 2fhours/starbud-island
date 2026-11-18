@@ -59,9 +59,9 @@ describe('十二属性与技能目录', () => {
     const rootMove = SKILL_LIST.find((move) => move.type === 'yinshui' && move.effect === 'root' && move.tier === 'divine');
     expect(rootMove).toBeTruthy();
     const first = resolveSkill(blankFighter(user), rooted, rootMove!, () => 0.2);
-    expect(first.join('')).toContain('定住');
+    expect(first.join('')).toContain('睡');
     const second = resolveSkill(blankFighter(user), rooted, rootMove!, () => 0.2);
-    expect(second.join('')).toContain('连续');
+    expect(second.join('')).toContain('没有叠加');
     expect(rootMove!.cooldown).toBeGreaterThan(0);
     const divine = blankFighter(user);
     resolveSkill(divine, blankFighter(foe), getMove('yinshui-divine-attack-0'), fixed);
