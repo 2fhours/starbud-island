@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BURN_FRACTION, BURN_PHYS_MUL, PARALYZE_SKIP, POISON_FRACTION, ailmentOf, statusLoss } from './ailments';
+import { BURN_FRACTION, BURN_PHYS_MUL, PARALYZE_SKIP, POISON_FRACTION, ailmentOf, moveEffectLabel, statusLoss } from './ailments';
 import { playerMove, prepareBattle } from './battle';
 import { blankFighter, damageOf, makeMon, maxHp, opening, resolveSkill, tickStatus } from './logic';
 import { SKILL_LIST, getMove } from './skills';
@@ -22,6 +22,9 @@ describe('异常状态', () => {
     expect(ailmentOf(poisons[0])).toBe('poison');
     expect(ailmentOf(paras[0])).toBe('paralyze');
     expect(ailmentOf(sleeps[0])).toBe('sleep');
+    expect(moveEffectLabel(burns[0])).toBe('灼伤');
+    expect(moveEffectLabel(getMove('yangmu-basic-attack-0'))).toBe('直击');
+    expect(moveEffectLabel(getMove('yangmu-basic-heal-0'))).toBe('治疗');
     const user = blankFighter(makeMon('lujiao', 12, 1, true, zero));
     const foe = blankFighter(makeMon('yanwei', 12, 1, true, zero));
     const burn = burns.find((move) => move.type === 'yangmu' && move.tier === 'basic') ?? burns[0];

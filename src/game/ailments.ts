@@ -13,6 +13,19 @@ export const AILMENT_LABEL: Record<Exclude<AilmentName, ''>, string> = {
   sleep: '睡眠',
 };
 
+export function moveEffectLabel(move: Pick<MoveDef, 'cat' | 'effect' | 'stat'>): string {
+  const ailment = ailmentOf(move);
+  if (ailment) return AILMENT_LABEL[ailment];
+  if (move.effect === 'shield' || move.effect === 'ward') return '护盾';
+  if (move.cat === 'heal') return '治疗';
+  if (move.cat === 'aid') return '强化';
+  if (move.effect === 'recoil') return '反伤';
+  if (move.effect === 'pierce') return '破防';
+  if (move.effect === 'dotstrike') return '持续';
+  if (move.cat === 'attack') return '直击';
+  return '';
+}
+
 export function ailmentOf(move: Pick<MoveDef, 'cat' | 'effect' | 'stat'>): AilmentName {
   if (move.effect === 'root') return 'sleep';
   if (move.cat !== 'status' || move.effect !== 'blight') return '';

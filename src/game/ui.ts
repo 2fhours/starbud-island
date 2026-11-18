@@ -1,7 +1,7 @@
 import type { Battle } from './battle';
 import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
-import { AILMENT_LABEL } from './ailments';
+import { AILMENT_LABEL, moveEffectLabel } from './ailments';
 import { evolutionStatus, ITEM_LABEL } from './evolution';
 import { aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
 import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
@@ -11,7 +11,9 @@ import type { MoveCat, MoveDef, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
 function formMark(move: MoveDef): string {
-  return `<span class="move-form">${skillFormLabel(move)}</span>`;
+  const effect = moveEffectLabel(move);
+  const text = effect ? `${skillFormLabel(move)}·${effect}` : skillFormLabel(move);
+  return `<span class="move-form">${text}</span>`;
 }
 
 function moveFacts(move: MoveDef): string {
