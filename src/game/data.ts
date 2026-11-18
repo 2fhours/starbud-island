@@ -191,6 +191,11 @@ function evolvedSpecies(): SpeciesDef[] {
 
 export const BASE_SPECIES: SpeciesId[] = SPECIES_LIST_RAW.map((species) => species.id);
 export const RIDGE_SPECIES: SpeciesId[] = ['wudeng', 'yunyang', 'luoxing', 'hanquan'];
+export const ISLAND_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
+  { speciesId: 'yanwei', level: 6 },
+  { speciesId: 'yanke', level: 7 },
+];
+
 export const RIDGE_TRIAL: Array<{ speciesId: SpeciesId; level: number }> = [
   { speciesId: 'wudeng', level: 13 },
   { speciesId: 'yunyang', level: 14 },
@@ -239,8 +244,8 @@ export function bossScript(done: boolean): { speaker: string; text: string }[] {
     ];
   }
   return [
-    { speaker: '岚川', text: '我是试炼官岚川。想确认你们是不是真正的伙伴，就在这片北林里让我看看。' },
-    { speaker: '岚川', text: '准备好再开始。如果撑不住，回星芽驿治好再来，试炼不会因此关闭。' },
+    { speaker: '岚川', text: '我是试炼官岚川。这场试炼我会派出焰尾狐和岩壳龟，比草坡上的野生更老练。' },
+    { speaker: '岚川', text: '可以先找青禾练一场，再多收服一只。撑不住就回星芽驿，试炼不会因此关闭。' },
   ];
 }
 

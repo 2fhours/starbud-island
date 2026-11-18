@@ -1,6 +1,6 @@
 import { AudioEngine } from './audio';
 import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type Battle } from './battle';
-import { RIDGE_TRIAL, bossScript, getSpecies, introScript, practiceScript } from './data';
+import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
   catchProbability,
@@ -955,7 +955,7 @@ export class Game implements GameHost {
     }
     if (this.npcId !== 'lanchuan') return;
     this.trainerKey = 'lanchuan';
-    this.battle = prepareBattle(this.play.team, [makeMon('yanwei', 7), makeMon('yanke', 8), makeMon('dianrong', 7)], 'trainer', '岚川');
+      this.battle = prepareBattle(this.play.team, ISLAND_TRIAL.map((entry) => makeMon(entry.speciesId, entry.level)), 'trainer', '岚川');
     this.mode = 'battle';
     this.beginLogs([bossScript(false)[0].text, '岚川派出了焰尾狐'], () => undefined);
   }

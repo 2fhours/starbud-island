@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RIDGE_SPECIES, RIDGE_TRIAL } from './data';
+import { ISLAND_TRIAL, RIDGE_SPECIES, RIDGE_TRIAL } from './data';
 import { deserialize } from './save';
 import { ENCOUNTER_REACH, WILD_HOLD, createRidge, createWorld, gateChoice, isWalkable, pathExists, wildDistance } from './world';
 
@@ -16,6 +16,7 @@ describe('两张地图', () => {
     expect(island.spawns.every((spawn) => spawn.level >= 3 && spawn.level <= 6)).toBe(true);
     expect(ridge.spawns.every((spawn) => spawn.level >= 8 && spawn.level <= 12)).toBe(true);
     expect(RIDGE_TRIAL.map((entry) => entry.level)).toEqual([13, 14, 13]);
+    expect(ISLAND_TRIAL.map((entry) => `${entry.speciesId}:${entry.level}`)).toEqual(['yanwei:6', 'yanke:7']);
     expect(new Set(island.spawns.map((spawn) => spawn.id)).size).toBe(island.spawns.length);
     expect(new Set(ridge.spawns.map((spawn) => spawn.id)).size).toBe(ridge.spawns.length);
     for (const id of island.spawns.map((spawn) => spawn.id)) {
