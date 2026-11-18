@@ -131,6 +131,8 @@ export interface DamageResult {
   attackBonus: number;
   defenseCut: number;
   stopped: boolean;
+  crit: boolean;
+  critMult: number;
 }
 
 export interface StrikeMods {
@@ -139,25 +141,44 @@ export interface StrikeMods {
   cutFlat?: number;
   cutPercent?: number;
   burned?: boolean;
+  crit?: boolean;
+  critRate?: number;
+  critDamage?: number;
 }
 
 export const BONUS_PERCENT_MAX = 0.5;
 export const CUT_PERCENT_MAX = 0.6;
+export const CRIT_RATE_BASE = 0.08;
+export const CRIT_RATE_MAX = 0.5;
+export const CRIT_MULT_BASE = 1.5;
+export const CRIT_MULT_MIN = 1.5;
+export const CRIT_MULT_MAX = 2;
 
-export function settleDamage(attackBase: number, defenseFlat: number, mods: StrikeMods = {}): { damage: number; stopped: boolean; attackBonus: number; defenseCut: number } {
+export function critChance(extra = 0): number {
+  return clamp(CRIT_RATE_BASE + Math.max(0, extra), 0, CRIT_RATE_MAX);
+}
+
+export function critMultiplier(crit: boolean, extra = 0): number {
+  if (!crit) return 1;
+  return clamp(CRIT_MULT_BASE + Math.max(0, extra), CRIT_MULT_MIN, CRIT_MULT_MAX);
+}
+
+export function settleDamage(attackBase: number, defenseFlat: number, mods: StrikeMods = {}): { damage: number; stopped: boolean; attackBonus: number; defenseCut: number; crit: boolean; critMult: number } {
   const bonusPercent = clamp(mods.bonusPercent ?? 0, 0, BONUS_PERCENT_MAX);
   const cutPercent = clamp(mods.cutPercent ?? 0, 0, CUT_PERCENT_MAX);
   const bonusFlat = Math.max(0, mods.bonusFlat ?? 0);
   const extraCut = Math.max(0, mods.cutFlat ?? 0);
+  const crit = !!mods.crit;
+  const critMult = critMultiplier(crit, mods.critDamage ?? 0);
   const attackBonus = attackBase * (1 + bonusPercent) + bonusFlat;
   const defenseCut = defenseFlat + extraCut;
-  const raw = attackBonus * (1 - cutPercent) - defenseCut;
-  if (raw < 1) return { damage: 1, stopped: true, attackBonus, defenseCut };
-  return { damage: Math.floor(raw), stopped: false, attackBonus, defenseCut };
+  const raw = attackBonus * critMult * (1 - cutPercent) - defenseCut;
+  if (raw < 1) return { damage: 1, stopped: true, attackBonus, defenseCut, crit, critMult };
+  return { damage: Math.floor(raw), stopped: false, attackBonus, defenseCut, crit, critMult };
 }
 
 export function blankFighter(mon: Mon): Fighter {
-  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, ailment: '', ailmentTurns: 0, ailmentChecked: false, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, cd: {} };
+  return { mon, shield: 0, dotTurns: 0, dotRatio: 0, hotTurns: 0, hotRatio: 0, rootTurns: 0, ailment: '', ailmentTurns: 0, ailmentChecked: false, bonusFlat: 0, bonusPercent: 0, cutFlat: 0, cutPercent: 0, critRate: 0, critDamage: 0, cd: {} };
 }
 
 export function aspectOf(mon: Mon): TypeId {
@@ -227,7 +248,7 @@ export function cycleAspect(mon: Mon): string {
 }
 
 export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () => number = Math.random, mods: StrikeMods = {}): DamageResult {
-  if (move.power <= 0) return { damage: 0, mult: 1, stab: false, attackBonus: 0, defenseCut: 0, stopped: false };
+  if (move.power <= 0) return { damage: 0, mult: 1, stab: false, attackBonus: 0, defenseCut: 0, stopped: false, crit: false, critMult: 1 };
   const mult = relate(move.type, aspectOf(defender)).mult;
   const stab = move.type === aspectOf(attacker);
   const stabMul = stab ? 1.2 : 1;
@@ -238,6 +259,8 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
   const defStat = form === 'magic' ? defProfile.magDef : defProfile.physDef * stageMul(defender.stages.def);
   const pierce = move.effect === 'pierce' ? 0.7 : 1;
   const spread = move.effect === 'strike' && move.tier === 'basic' ? 0.08 : 0.05;
+  const rate = critChance(Math.max(0, mods.critRate ?? 0) + Math.max(0, move.critRate ?? 0));
+  const crit = rng() < rate;
   const roll = 1 - spread + rng() * spread * 2;
   const attackBase = (move.power * atk / 60) * stabMul * mult * roll;
   const defenseFlat = defStat * pierce;
@@ -246,8 +269,10 @@ export function damageOf(attacker: Mon, defender: Mon, move: MoveDef, rng: () =>
     bonusPercent: (mods.bonusPercent ?? 0) + (move.bonusPercent ?? 0),
     cutFlat: mods.cutFlat ?? 0,
     cutPercent: mods.cutPercent ?? 0,
+    crit,
+    critDamage: Math.max(0, mods.critDamage ?? 0) + Math.max(0, move.critDamage ?? 0),
   });
-  return { damage: settled.damage, mult, stab, attackBonus: settled.attackBonus, defenseCut: settled.defenseCut, stopped: settled.stopped };
+  return { damage: settled.damage, mult, stab, attackBonus: settled.attackBonus, defenseCut: settled.defenseCut, stopped: settled.stopped, crit: settled.crit, critMult: settled.critMult };
 }
 
 export function readDelay(text: string, fast = false): number {
@@ -331,6 +356,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
       bonusPercent: user.bonusPercent,
       cutFlat: foe.cutFlat,
       cutPercent: foe.cutPercent,
+      critRate: user.critRate,
+      critDamage: user.critDamage,
       burned: user.ailment === 'burn',
     });
     const absorbed = Math.min(foe.shield, result.damage);
@@ -338,7 +365,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     const hpLoss = result.damage - absorbed;
     foe.mon.hp = Math.max(0, foe.mon.hp - hpLoss);
     const hitLine = result.stopped ? `没能破开防御，造成 ${result.damage} 点伤害` : `造成 ${result.damage} 点伤害`;
-    logs.push(absorbed ? `${hitLine}，护盾挡下 ${absorbed}` : hitLine);
+    const withCrit = result.crit ? `暴击，${hitLine}` : hitLine;
+    logs.push(absorbed ? `${withCrit}，护盾挡下 ${absorbed}` : withCrit);
     for (const note of relate(move.type, aspectOf(foe.mon)).notes) logs.push(note);
     if (move.effect === 'recoil' && user.mon.hp > 1) {
       const recoil = Math.max(1, Math.floor(result.damage * 0.1));
@@ -377,6 +405,8 @@ export function resolveSkill(user: Fighter, foe: Fighter, move: MoveDef, rng: ()
     user.mon.stages[stat] = clamp(user.mon.stages[stat] + 1, -3, 3);
     user.bonusFlat += move.bonusFlat;
     user.bonusPercent = clamp(user.bonusPercent + move.bonusPercent, 0, BONUS_PERCENT_MAX);
+    user.critRate += Math.max(0, move.critRate);
+    user.critDamage += Math.max(0, move.critDamage);
     logs.push(`${an}的${stat === 'spd' ? '速度' : stat === 'def' ? '防御' : '攻击'}上升了`);
     if (move.effect === 'cleanse') logs.push(cleanse(user) ? `${an}净化了减益` : `${an}没有需要净化的状态`);
   } else if (move.effect === 'root' || move.effect === 'blight') {

@@ -75,19 +75,19 @@ export function maxMpFrom(core: Five, level: number): number {
 }
 
 export function physAtk(core: Five): number {
-  return Math.floor((core.str * 3) / 5) + 6;
+  return Math.floor((core.str * 3) / 5) + Math.floor((core.str * 3) / 10);
 }
 
 export function physDef(core: Five): number {
-  return Math.floor((core.con * 2) / 5) + Math.floor(core.str / 5) + 4;
+  return Math.floor((core.con * 2) / 5) + Math.floor(core.str / 5) + Math.floor((core.con * 3) / 10);
 }
 
 export function magAtk(core: Five): number {
-  return Math.floor((core.int * 3) / 5) + 6;
+  return Math.floor((core.int * 3) / 5) + Math.floor((core.int * 3) / 10);
 }
 
 export function magDef(core: Five): number {
-  return Math.floor((core.int * 3) / 10) + Math.floor((core.spi * 3) / 10) + 4;
+  return Math.floor((core.int * 3) / 10) + Math.floor((core.spi * 3) / 10) + Math.floor(((core.int + core.spi) * 3) / 20);
 }
 
 export function actionSpeed(core: Five): number {

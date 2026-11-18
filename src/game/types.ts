@@ -107,6 +107,8 @@ export interface MoveDef {
   bonusPercent: number;
   cutFlat: number;
   cutPercent: number;
+  critRate: number;
+  critDamage: number;
   desc: string;
 }
 
@@ -139,6 +141,8 @@ export interface Fighter {
   bonusPercent: number;
   cutFlat: number;
   cutPercent: number;
+  critRate: number;
+  critDamage: number;
   cd: Record<string, number>;
 }
 
