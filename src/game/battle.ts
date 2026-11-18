@@ -68,6 +68,8 @@ function clearBody(battle: Battle, mon: Mon): void {
   fighter.bonusPercent = 0;
   fighter.cutFlat = 0;
   fighter.cutPercent = 0;
+  fighter.critRate = 0;
+  fighter.critDamage = 0;
 }
 
 function foe(battle: Battle): Mon {

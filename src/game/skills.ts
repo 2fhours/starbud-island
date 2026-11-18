@@ -137,6 +137,8 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
   const bonusPercent = cat === 'attack' && effect === 'strike' && tier !== 'basic' ? 0.1 : cat === 'aid' && effect === 'buff' ? 0.08 : 0;
   const cutFlat = cat === 'guard' && effect === 'ward' ? 4 : 0;
   const cutPercent = cat === 'guard' && effect === 'ward' ? 0.1 : 0;
+  const critRate = cat === 'attack' && effect === 'strike' && tier !== 'basic' ? 0.12 : cat === 'aid' && effect === 'buff' && tier === 'basic' && slot === 0 ? 0.16 : 0;
+  const critDamage = cat === 'attack' && effect === 'recoil' && tier === 'divine' ? 0.5 : 0;
   const move: MoveDef = {
     id: `${type}-${tier}-${cat}-${slot}`,
     name,
@@ -158,6 +160,8 @@ function build(type: TypeId, cat: MoveCat, tierIndex: number, slot: number, name
     bonusPercent,
     cutFlat,
     cutPercent,
+    critRate,
+    critDamage,
     desc: '',
   };
   move.desc = describe(move);
@@ -171,6 +175,12 @@ function lead(move: MoveDef): string {
   return role === form ? `${tier}${role}` : `${tier}${role}。${form}`;
 }
 
+function critPhrase(move: MoveDef): string {
+  if (move.critDamage > 0) return '暴击时伤害更高。';
+  if (move.critRate <= 0) return '';
+  return move.cat === 'aid' ? '提高暴击。' : '容易暴击。';
+}
+
 function describe(move: MoveDef): string {
   const head = lead(move);
   const cool = move.cooldown ? `使用后冷却 ${move.cooldown} 回合。` : '';
@@ -178,11 +188,12 @@ function describe(move: MoveDef): string {
   const use = skillUseLine(move);
   const bump = `${move.bonusPercent ? `伤害提高 ${pct(move.bonusPercent)}%。` : ''}${move.bonusFlat ? `额外增加 ${move.bonusFlat} 点。` : ''}`;
   const soften = `${move.cutPercent ? `受到的伤害降低 ${pct(move.cutPercent)}%。` : ''}${move.cutFlat ? `再减少 ${move.cutFlat} 点。` : ''}`;
+  const crit = critPhrase(move);
   const stat = move.stat === 'spd' ? '速度' : move.stat === 'def' ? '防御' : '攻击';
   let text = `${head}。有 ${pct(move.chance)}% 概率让对方睡眠 1 回合。睡着时不能再次催眠。${mana}${cool}`;
-  if (move.effect === 'strike') text = `${head}。${use}，威力 ${move.power}。${bump}${mana}${cool}`;
+  if (move.effect === 'strike') text = `${head}。${use}，威力 ${move.power}。${bump}${crit}${mana}${cool}`;
   else if (move.effect === 'pierce') text = `${head}。${use}，忽视一部分防御，威力 ${move.power}。${mana}${cool}`;
-  else if (move.effect === 'recoil') text = `${head}。${use}，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${mana}${cool}`;
+  else if (move.effect === 'recoil') text = `${head}。${use}，威力 ${move.power}，自己受到少量反震，但不会因此倒下。${bump}${crit}${mana}${cool}`;
   else if (move.effect === 'dotstrike') text = `${head}。${use}，威力 ${move.power}，并在 ${move.turns} 回合内附加持续伤害。${mana}${cool}`;
   else if (move.effect === 'shield') text = `${head}。获得最大体力 ${pct(move.ratio)}% 的护盾，护盾总量不超过 35%。${mana}${cool}`;
   else if (move.effect === 'ward') text = `${head}。获得最大体力 ${pct(move.ratio)}% 的护盾，并让防御上升。${soften}${mana}${cool}`;
@@ -190,7 +201,7 @@ function describe(move: MoveDef): string {
   else if (move.effect === 'hot') text = `${head}。在 ${move.turns} 回合内每回合恢复少量体力，每跳不超过 8%。${mana}${cool}`;
   else if (move.effect === 'cleanse' && move.cat === 'heal') text = `${head}。恢复最大体力的 ${pct(Math.min(0.4, move.ratio))}% ，并净化一个减益。${mana}${cool}`;
   else if (move.effect === 'cleanse') text = `${head}。净化一个减益，并提升${stat}。${mana}${cool}`;
-  else if (move.effect === 'buff') text = `${head}。提升自己的${stat}一阶。${bump}${mana}${cool}`;
+  else if (move.effect === 'buff') text = `${head}。提升自己的${stat}一阶。${bump}${crit}${mana}${cool}`;
   else if (move.effect === 'blight') {
     const label = AILMENT_LABEL[ailmentOf(move) || 'burn'];
     text = `${head}。造成${label}，持续 ${move.turns} 回合，并降低对方${stat}。相同异常不会叠加。${mana}${cool}`;
@@ -276,6 +287,8 @@ export function basicStrike(type: TypeId): MoveDef {
     bonusPercent: 0,
     cutFlat: 0,
     cutPercent: 0,
+    critRate: 0,
+    critDamage: 0,
     desc: '',
   };
   move.desc = describe(move);
