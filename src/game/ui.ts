@@ -3,8 +3,8 @@ import { ELEMENT_RULE_TEXT, TYPE_META, TYPE_ORDER } from './elements';
 import { NAME_PRESETS, bossScript, getSpecies, practiceScript, SPECIES_LIST, STARTERS, stageElement } from './data';
 import { AILMENT_LABEL, moveEffectLabel } from './ailments';
 import { evolutionStatus, ITEM_LABEL } from './evolution';
-import { aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
-import { SKILL_LIST, basicStrike, getMove, skillFormLabel, skillStats } from './skills';
+import { actionOrder, aspectOf, currentObjective, formatPlay, grandmaFollowup, learnableMoves, maxHp, maxMp, profile, questObjectives, ridgeObjectives } from './logic';
+import { SKILL_LIST, basicStrike, getMove, skillForm, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
 import type { MoveCat, MoveDef, PlayState, SpeciesId, TypeId } from './types';
@@ -74,6 +74,24 @@ function hpMarkup(hp: number, max: number): string {
   const ratio = max <= 0 ? 0 : hp / max;
   const tone = ratio <= 0.28 ? 'low' : ratio <= 0.55 ? 'mid' : '';
   return `<div class="hp ${tone}"><span style="width:${Math.max(0, Math.min(100, ratio * 100))}%"></span></div><small>体力 ${hp}/${max}</small>`;
+}
+
+function resourceRow(hp: number, hpMax: number, mp: number, mpMax: number): string {
+  const ratio = hpMax <= 0 ? 0 : hp / hpMax;
+  const tone = ratio <= 0.28 ? 'low' : ratio <= 0.55 ? 'mid' : '';
+  const hpWidth = Math.max(0, Math.min(100, ratio * 100));
+  const mpWidth = mpMax <= 0 ? 0 : Math.max(0, Math.min(100, (mp / mpMax) * 100));
+  return `<div class="vitals"><div class="vital"><span class="vital-k">体力</span><div class="hp ${tone}"><span style="width:${hpWidth}%"></span></div><small>${hp}/${hpMax}</small></div><div class="vital"><span class="vital-k">法力</span><div class="mp"><span style="width:${mpWidth}%"></span></div><small>${mp}/${mpMax}</small></div></div>`;
+}
+
+function fighterTags(state: { shield?: number; dotTurns?: number; hotTurns?: number; ailment?: string; ailmentTurns?: number } | undefined): string {
+  if (!state) return '';
+  const tags: string[] = [];
+  if (state.shield) tags.push(`<span class="status-tag tag-shield">护盾 ${state.shield}</span>`);
+  if (state.ailment && state.ailment in AILMENT_LABEL) tags.push(`<span class="status-tag tag-${state.ailment}">${AILMENT_LABEL[state.ailment as keyof typeof AILMENT_LABEL]} ${state.ailmentTurns ?? 0}</span>`);
+  if (state.dotTurns) tags.push(`<span class="status-tag tag-dot">持续 ${state.dotTurns}</span>`);
+  if (state.hotTurns) tags.push(`<span class="status-tag tag-hot">恢复 ${state.hotTurns}</span>`);
+  return tags.join('');
 }
 
 function typePill(type: string): string {
@@ -233,11 +251,17 @@ function battleSheet(host: GameHost): string {
   const myAspect = aspectOf(mine);
   const basic = basicStrike(myAspect);
   const mineState = battle.runtime[mine.uid];
+  const moveButton = (move: ReturnType<typeof getMove>, act: string, arg: string, label: string, tone = '') => {
+    const cooling = (mineState?.cd[move.id] ?? 0) > 0;
+    const broke = (mine.mp ?? 0) < move.cost;
+    const form = skillForm(move);
+    const ready = host.canAct && !cooling && !broke;
+    const state = cooling ? `<span class="move-state">冷却 ${mineState?.cd[move.id] ?? 0}</span>` : broke ? `<span class="move-state">法力不足</span>` : '';
+    return `<button class="btn ${tone} move-btn form-${form}${cooling ? ' is-cool' : ''}${broke ? ' is-broke' : ''}" data-form="${form}" data-act="${act}" data-arg="${arg}" ${ready ? '' : 'disabled'}>${label}${formMark(move)}${move.cost > 0 ? ` ·${move.cost}` : ''}${state}</button>`;
+  };
   const moves = (mine.moves ?? []).map((id, index) => {
     const move = getMove(id);
-    const cooling = (mineState?.cd[id] ?? 0) > 0;
-    const broke = (mine.mp ?? 0) < move.cost;
-    return `<button class="btn" data-act="battle-move" data-arg="${index}" ${host.canAct && !cooling && !broke ? '' : 'disabled'}>${index + 1}. ${esc(move.name)}${formMark(move)}${move.cost > 0 ? ` ·${move.cost}` : ''}${cooling ? ` ${mineState.cd[id]}` : ''}</button>`;
+    return moveButton(move, 'battle-move', String(index), `${index + 1}. ${esc(move.name)}`);
   }).join('');
   const switches = battle.player.map((mon, index) => {
     const name = getSpecies(mon.speciesId).name;
@@ -247,18 +271,14 @@ function battleSheet(host: GameHost): string {
   const actions = host.mustSwitch
     ? `<p>选择还能战斗的伙伴。</p><div class="party">${switches}</div>`
     : host.canAct
-      ? `<div class="moves"><button class="btn secondary" data-act="battle-basic" ${host.canAct ? '' : 'disabled'}>${esc(basic.name)}${formMark(basic)}</button>${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
+      ? `<div class="moves">${moveButton(basic, 'battle-basic', '', esc(basic.name), 'secondary')}${moves}</div><div class="row battle-row"><button class="btn secondary" data-act="toggle-switch">更换</button>${battle.kind === 'wild' ? `<button class="btn leaf" data-act="battle-catch">捕捉</button><button class="btn secondary" data-act="battle-run">退开</button>` : ''}</div>${host.switchOpen ? `<div class="party">${switches}</div>` : ''}`
       : `<p class="auto-note">回合自动继续</p>`;
   const foeAspect = aspectOf(foe);
   const foeState = battle.runtime[foe.uid];
-  const tags = [
-    foeState?.shield ? `护盾${foeState.shield}` : '',
-    foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
-    foeState?.ailment ? `${AILMENT_LABEL[foeState.ailment]} ${foeState.ailmentTurns}` : '',
-  ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
+  const order = actionOrder(mine) >= actionOrder(foe) ? '我方先出手' : '对方先出手';
   const foeSlot = portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'), 'foe');
   const mineSlot = portrait(mine.speciesId, mine.hp <= 0, 'stage', battleFacing('player'), 'player');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${resourceRow(foe.hp, maxHp(foe), foe.mp, maxMp(foe))}<div class="status-row">${fighterTags(foeState)}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><p class="turn-order">${order}</p><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${resourceRow(mine.hp, maxHp(mine), mine.mp, maxMp(mine))}<div class="status-row">${fighterTags(mineState)}</div></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 

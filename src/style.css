@@ -173,7 +173,29 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   overflow: hidden;
   margin: 4px 0;
 }
-.hp > span { display: block; height: 100%; background: linear-gradient(90deg, #67d36a, #b6e86a); width: 0; }
+.vitals { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 2px; }
+.vital { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.vital-k { font-size: 12px; font-weight: 700; color: var(--soft); }
+.vital .hp, .vital .mp { margin: 0; height: 12px; }
+.vital small { font-variant-numeric: tabular-nums; color: var(--ink); }
+.mp {
+  width: 100%;
+  height: 12px;
+  background: #efe0d2;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.mp > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3d7ea8, #8fd4ea); }
+.turn-order { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: var(--leaf); }
+.tag-shield { background: #d7e8f8; }
+.tag-burn { background: #ffd7c8; }
+.tag-poison { background: #dff3c8; }
+.tag-paralyze { background: #fff0b8; }
+.tag-sleep { background: #e4dcf4; }
+.tag-dot { background: #f8e0c8; }
+.tag-hot { background: #d7f5e4; }
+.move-state { font-size: 11px; font-weight: 700; }
+.hp > span { display: block; height: 100%; background: linear-gradient(90deg, #67d36a, #b6e86a); width: 0; transition: width 0.25s ease; }
 .hp.mid > span { background: linear-gradient(90deg, #f0c14a, #ffe08a); }
 .hp.low > span { background: linear-gradient(90deg, #ef5d4a, #ffb199); }
 .hint {
@@ -456,8 +478,8 @@ body:not([data-mode="explore"]) .build-tag {
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  height: 120px;
-  min-height: 120px;
+  height: 104px;
+  min-height: 104px;
   margin-top: 4px;
 }
 .battle-field::before {
@@ -473,8 +495,8 @@ body:not([data-mode="explore"]) .build-tag {
 }
 .battle-field .portrait-frame.portrait-stage.battle-actor {
   position: relative;
-  width: 72px;
-  height: 104px;
+  width: 64px;
+  height: 92px;
   max-width: 38%;
   max-height: none;
   aspect-ratio: auto;
@@ -482,9 +504,13 @@ body:not([data-mode="explore"]) .build-tag {
   z-index: 1;
 }
 .battle-field .portrait-frame.portrait-stage.battle-actor[data-side="player"] {
-  width: 88px;
-  height: 120px;
+  width: 76px;
+  height: 104px;
 }
+.battle-sheet .log { height: 52px; min-height: 52px; max-height: 52px; }
+.vitals { gap: 2px; margin: 2px 0; }
+.vital .hp, .vital .mp, .mp { height: 9px; }
+.turn-order { margin: 0; font-size: 12px; line-height: 1.2; }
 .battle-motion,
 .portrait-facing,
 .battle-fx {
