@@ -222,7 +222,7 @@ function teamSheet(play: PlayState): string {
     }).join(' · ');
     const evo = evolutionStatus(mon, play, (id) => getSpecies(id).name);
     const evolveButton = evo.ready ? `<button class="btn tiny leaf" data-act="evolve" data-arg="${index}">进化</button>` : '';
-    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><strong>${esc(species.name)}</strong> ${typePill(aspectOf(mon))} <span>${mon.level} 级</span>${hpMarkup(mon.hp, max)}<small>法力 ${mon.mp}/${maxMp(mon)}</small>${petStats(mon)}<p>${names}</p><p class="evo">${esc(evo.line)}</p><div class="row"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${evolveButton}${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
+    return `<article class="mon-card ${index === 0 ? 'lead' : ''}">${portrait(mon.speciesId, mon.hp <= 0, 'detail')}<div class="mon-copy"><div class="mon-head"><strong>${esc(species.name)}</strong>${typePill(aspectOf(mon))}<span>${mon.level} 级</span></div>${resourceRow(mon.hp, max, mon.mp, maxMp(mon))}${petStats(mon)}<p class="move-line">${names}</p><p class="evo">${esc(evo.line)}</p><div class="row mon-actions"><button class="btn tiny secondary" data-act="open-loadout" data-arg="${index}">技能</button><button class="btn tiny secondary" data-act="attune" data-arg="${index}">试炼</button>${evolveButton}${index === 0 ? '' : `<button class="btn tiny leaf" data-act="set-lead" data-arg="${index}">领队</button>`}</div>${index === 0 ? '<small>当前领队，会跟在身后</small>' : ''}</div></article>`;
   }).join('');
   const box = play.box.length
     ? play.box.map((mon) => `<span>${esc(getSpecies(mon.speciesId).name)} ${mon.level}级</span>`).join('、')
@@ -236,7 +236,8 @@ function dexSheet(play: PlayState): string {
   const cards = SPECIES_LIST.map((species) => {
     const entry = play.dex[species.id];
     if (!entry?.seen) return `<article class="dex-card unknown"><div class="portrait"></div><strong>？？？</strong><p>还没见过</p></article>`;
-    return `<article class="dex-card">${portrait(species.id)}<strong>${esc(species.name)}</strong><div>${typePill(species.type)}</div><p>${entry.caught ? esc(species.dex) : '见过了，还没同行。'}</p></article>`;
+    const state = entry.caught ? 'caught' : 'seen';
+    return `<article class="dex-card ${state}">${portrait(species.id)}<strong>${esc(species.name)}</strong><div>${typePill(species.type)}</div><p>${entry.caught ? esc(species.dex) : '见过了，还没同行。'}</p></article>`;
   }).join('');
   return shell(`<h2>芽灵图鉴 ${caught}/${total}</h2>`, `<div class="dex-grid">${cards}</div>`, `<button class="btn secondary" data-act="panel" data-arg="menu">返回</button>`);
 }

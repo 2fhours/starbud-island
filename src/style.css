@@ -434,7 +434,11 @@ body:not([data-mode="explore"]) .build-tag {
   text-align: center;
   color: var(--ink);
 }
-.choice.selected, .mon-card.lead { border-color: var(--leaf); }
+.choice.selected, .mon-card.lead, .dex-card.caught { border-color: var(--leaf); }
+.dex-card.seen { background: #fffaf4; }
+.dex-card.unknown { background: #f3ebe3; }
+.mon-head, .mon-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.move-line { margin: 4px 0; line-height: 1.4; }
 .choice canvas.portrait-card, .dex-card canvas.portrait-card, .mon-card canvas.portrait-card {
   width: min(72px, 100%);
   height: auto;
