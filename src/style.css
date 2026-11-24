@@ -160,6 +160,24 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
 }
 .battle-bottom .portrait-frame.portrait-card { width: 48px; height: 72px; }
 .hud-copy strong { display: block; font-size: 1rem; }
+.hud-left { width: min(220px, 58vw); }
+.hud-copy { min-width: 0; }
+.hud-copy .quest-chip {
+  display: block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #e7f6ea;
+  color: #245c32;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  max-height: none;
+  overflow-wrap: anywhere;
+}
+.hud-copy { overflow: visible; }
 .map-chip { color: var(--leaf); font-size: 0.82rem; letter-spacing: 0.08em; }
 .hud-copy small, .fine { color: var(--soft); }
 .hud-right button, .prompt, .texty, .btn { pointer-events: auto; }

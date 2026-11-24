@@ -1628,6 +1628,7 @@ export class Game implements GameHost {
 
   private refresh(): void {
     document.body.dataset.mode = this.mode;
+    if (this.mode !== 'explore') document.getElementById('toast')?.classList.remove('show');
     renderOverlay(this.overlay, this);
     this.hudSig = '';
     this.placeChrome();
