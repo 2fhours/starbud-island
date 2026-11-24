@@ -628,13 +628,21 @@ try {
   });
   if (!battleResources.mana || !battleResources.basic) throw new Error(`战斗没有法力或普通攻击 ${JSON.stringify(battleResources)}`);
   await page.waitForFunction(() => {
-    const foe = document.querySelector('.battle-stage img.standing');
-    const mine = document.querySelector('.battle-bottom img.standing');
+    const foe = document.querySelector('[data-side="foe"] img.standing');
+    const mine = document.querySelector('[data-side="player"] img.standing');
     return foe && mine && foe.complete && mine.complete && foe.naturalWidth > 0 && mine.naturalWidth > 0;
   });
   const battleSides = await page.evaluate(() => {
-    const foe = document.querySelector('.battle-stage img.standing');
-    const mine = document.querySelector('.battle-bottom img.standing');
+    const foe = document.querySelector('[data-side="foe"] img.standing');
+    const mine = document.querySelector('[data-side="player"] img.standing');
+    const mineSlot = document.querySelector('[data-side="player"]');
+    const foeSlot = document.querySelector('[data-side="foe"]');
+    const facing = mineSlot.querySelector('.portrait-facing');
+    const motion = mineSlot.querySelector('.battle-motion');
+    const fx = mineSlot.querySelector('.battle-fx');
+    const name = document.querySelector('.battle-bottom strong');
+    const mineBox = mineSlot.getBoundingClientRect();
+    const foeBox = foeSlot.getBoundingClientRect();
     return {
       foe: foe.getAttribute('src'),
       mine: mine.getAttribute('src'),
@@ -642,6 +650,15 @@ try {
       mineFace: mine.dataset.facing,
       foeRatio: foe.naturalWidth * 3 === foe.naturalHeight * 2,
       mineRatio: mine.naturalWidth * 3 === mine.naturalHeight * 2,
+      mirror: facing.dataset.mirror,
+      gaze: mineSlot.dataset.gaze,
+      transform: getComputedStyle(facing).transform,
+      foeMirror: foeSlot.querySelector('.portrait-facing').dataset.mirror,
+      foeTransform: getComputedStyle(foeSlot.querySelector('.portrait-facing')).transform,
+      motionParent: motion.contains(facing),
+      fxOutside: fx && !facing.contains(fx),
+      nameOutside: name && !mineSlot.contains(name),
+      playerLeft: mineBox.right <= foeBox.left + 2,
     };
   });
   if (!battleSides.foe?.includes('luzhu-front.jpg') || battleSides.foeFace !== 'front' || !battleSides.foeRatio) {
@@ -649,6 +666,12 @@ try {
   }
   if (!battleSides.mine?.includes('lujiao-back.jpg') || battleSides.mineFace !== 'back' || !battleSides.mineRatio) {
     throw new Error(`我方没有用背面 ${JSON.stringify(battleSides)}`);
+  }
+  if (battleSides.mirror !== '0' || battleSides.gaze !== 'right' || battleSides.transform !== 'none') {
+    throw new Error(`叶角鹿背面原稿已经朝右，不应再翻转 ${JSON.stringify(battleSides)}`);
+  }
+  if (battleSides.foeMirror !== '0' || battleSides.foeTransform !== 'none' || !battleSides.motionParent || !battleSides.fxOutside || !battleSides.nameOutside || !battleSides.playerLeft) {
+    throw new Error(`朝向层或站位不对 ${JSON.stringify(battleSides)}`);
   }
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
   await page.setViewport({ width: 320, height: 568 });

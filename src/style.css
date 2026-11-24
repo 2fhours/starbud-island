@@ -43,6 +43,10 @@ canvas#view { display: block; width: 100%; height: 100%; touch-action: none; }
   text-align: center;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+body:not([data-mode="explore"]) #toast {
+  top: calc(12px + env(safe-area-inset-top));
+  bottom: auto;
+}
 
 .hud-left, .hud-right, .hint, .prompt, .ribbon {
   position: absolute;
@@ -107,8 +111,8 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   background: #fff6ec;
   max-width: 100%;
 }
-.portrait-frame > img.standing,
-.portrait-frame > canvas.portrait {
+.portrait-frame img.standing,
+.portrait-frame canvas.portrait {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -332,7 +336,7 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   align-items: center;
 }
 .battle-top { grid-template-columns: minmax(0, 1fr) minmax(72px, 38%); }
-.battle-bottom { grid-template-columns: 72px minmax(0, 1fr); }
+.battle-bottom { grid-template-columns: minmax(0, 1fr); }
 #catch-ring { display: block; width: min(168px, 100%); height: auto; aspect-ratio: 1; max-height: min(168px, 30dvh); }
 .music-dock {
   position: absolute;
@@ -418,27 +422,80 @@ body:not([data-mode="explore"]) .build-tag {
   font-weight: 700;
 }
 .battle-top > div, .battle-bottom > div { min-width: 0; overflow-wrap: anywhere; }
+.battle-sheet .log,
+.battle-sheet .battle-bottom { flex: 0 0 auto; overflow: visible; }
+.battle-sheet .sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .battle-stage {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   height: auto;
-  min-height: 120px;
-  margin: 0 0 8px;
-  padding: 14px 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px 10px;
   border-radius: 16px;
   overflow: visible;
   flex: 0 0 auto;
 }
 .battle-stage .battle-top {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  display: block;
   width: 100%;
   height: auto;
   min-width: 0;
   overflow: visible;
-  align-items: center;
 }
-.battle-stage canvas.portrait-stage { max-height: 96px; max-width: 42%; align-self: center; }
-.battle-stage .portrait-frame.portrait-stage { align-self: center; justify-self: end; }
+.battle-field {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  height: 120px;
+  min-height: 120px;
+  margin-top: 4px;
+}
+.battle-field::before {
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 4px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(70, 50, 20, 0.14);
+  pointer-events: none;
+}
+.battle-field .portrait-frame.portrait-stage.battle-actor {
+  position: relative;
+  width: 80px;
+  height: 112px;
+  max-width: 38%;
+  max-height: none;
+  aspect-ratio: auto;
+  align-self: flex-end;
+  z-index: 1;
+}
+.battle-motion,
+.portrait-facing,
+.battle-fx {
+  position: absolute;
+  inset: 0;
+}
+.portrait-facing { transform-origin: center center; }
+.portrait-facing[data-mirror="1"] { transform: scaleX(-1); }
+.battle-fx {
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.battle-stage canvas.portrait-stage { max-height: none; max-width: 100%; }
+.battle-stage .portrait-frame.portrait-stage { align-self: flex-end; justify-self: auto; }
 .log {
   height: 72px;
   min-height: 72px;
@@ -635,10 +692,10 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .battle-top .type { padding: 0 6px; }
   .battle-sheet .status-row { margin: 0; }
   .battle-sheet .status-row:empty { display: none; }
-  .battle-stage .portrait-frame.portrait-stage { width: 42px; height: 64px; max-height: 64px; }
+  .battle-field { height: 116px; min-height: 116px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 72px; height: 108px; }
   .battle-sheet .log { flex: 0 0 auto; height: 32px; min-height: 32px; max-height: 36px; margin: 0; overflow: auto; }
-  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 36px minmax(0, 1fr); align-items: center; }
-  .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 32px; height: 48px; }
+  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); align-items: center; }
 }
 @media (max-width: 380px) {
   .mon-card { grid-template-columns: 80px minmax(0, 1fr); }
@@ -671,8 +728,9 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .sheet-head { display: none; }
   .battle-sheet .sheet-body { display: flex; flex-direction: column; gap: 6px; }
   .battle-sheet .stage { height: auto; min-height: 0; margin: 0; flex: 0 0 auto; padding: 12px 14px; border-radius: 12px; overflow: visible; }
-  .battle-stage canvas.portrait-stage,
-  .battle-stage .portrait-frame.portrait-stage { max-height: 48px; height: 48px; width: 32px; }
+  .battle-stage { min-height: 0; }
+  .battle-field { height: 96px; min-height: 96px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 60px; height: 90px; }
   .battle-sheet .battle-top h2 { font-size: 15px; line-height: 1.15; margin: 0; }
   .battle-sheet .battle-top .eyebrow,
   .battle-sheet .battle-top small { font-size: 11px; line-height: 1.15; }
@@ -680,7 +738,7 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .battle-bottom { align-items: center; }
   .battle-sheet .battle-bottom canvas.portrait-card { width: min(56px, 100%); }
   .battle-sheet .battle-bottom .portrait-frame.portrait-card { width: 28px; height: 42px; }
-  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: 32px minmax(0, 1fr); }
+  .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); }
   .battle-sheet .moves .btn,
   .battle-sheet .sheet-foot .actions .btn { min-height: 34px; padding: 4px 8px; font-size: 13px; }
   .battle-sheet .log { flex: 0 0 auto; height: auto; min-height: 28px; max-height: 40px; }
@@ -695,7 +753,7 @@ body:not([data-mode="explore"]) .build-tag {
     flex: 0 0 auto;
     overflow: auto;
   }
-  .battle-sheet .battle-bottom { max-height: 42px; }
+  .battle-sheet .battle-bottom { max-height: none; }
   .battle-sheet .sheet-body { gap: 0; overflow: hidden; }
   .battle-sheet .sheet-foot { padding: 2px 12px 4px; }
   .battle-sheet .battle-bottom,

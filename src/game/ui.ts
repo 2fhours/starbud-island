@@ -82,11 +82,11 @@ function typePill(type: string): string {
   return `<span class="type" style="background:${meta.color}">${meta.label}</span>`;
 }
 
-function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'detail' | 'hud' = 'card', facing: PortraitFacing = 'front'): string {
+function portrait(id: SpeciesId, faint = false, fit: 'stage' | 'card' | 'detail' | 'hud' = 'card', facing: PortraitFacing = 'front', slot?: 'player' | 'foe'): string {
   if (fit === 'hud') {
     return `<canvas class="portrait portrait-hud" data-fit="hud" data-species="${id}" data-faint="${faint ? '1' : '0'}" width="64" height="64" aria-hidden="true"></canvas>`;
   }
-  return speciesPortraitHtml(id, fit, faint, facing);
+  return speciesPortraitHtml(id, fit, faint, facing, slot);
 }
 
 function talkRow(actor: string | null, body: string, compact = false): string {
@@ -256,7 +256,9 @@ function battleSheet(host: GameHost): string {
     foeState?.dotTurns ? `持续${foeState.dotTurns}` : '',
     foeState?.ailment ? `${AILMENT_LABEL[foeState.ailment]} ${foeState.ailmentTurns}` : '',
   ].filter(Boolean).map((text) => `<span class="status-tag">${text}</span>`).join('');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div>${portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'))}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom">${portrait(mine.speciesId, mine.hp <= 0, 'card', battleFacing('player'))}<div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
+  const foeSlot = portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'), 'foe');
+  const mineSlot = portrait(mine.speciesId, mine.hp <= 0, 'stage', battleFacing('player'), 'player');
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${hpMarkup(foe.hp, maxHp(foe))}<small>法力 ${foe.mp}/${maxMp(foe)}</small><div class="status-row">${tags}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${hpMarkup(mine.hp, maxHp(mine))}<small>法力 ${mine.mp}/${maxMp(mine)}</small></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 
