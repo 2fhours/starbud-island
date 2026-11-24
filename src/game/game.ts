@@ -3,6 +3,7 @@ import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type 
 import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getMove, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
+  aspectOf,
   catchProbability,
   cloneMon,
   commitEvolution,
@@ -26,6 +27,7 @@ import {
   topUpBalls,
 } from './logic';
 import { basicStrike } from './skills';
+import { blankCueMemory, elementColor, readBattleCue, type BattleCue, type CueMemory } from './fx';
 import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
@@ -149,6 +151,9 @@ export class Game implements GameHost {
   private inspectX = 0;
   private inspectY = 0;
   private holdingKey = '';
+  private cueMemory: CueMemory = blankCueMemory();
+  private fxTimer = 0;
+  private fxGen = 0;
   private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
@@ -1360,6 +1365,8 @@ export class Game implements GameHost {
     this.logIndex = 0;
     this.logsDone = false;
     this.afterLogs = after;
+    this.cueMemory = blankCueMemory();
+    this.clearFx();
     this.revealLog();
   }
 
@@ -1367,7 +1374,9 @@ export class Game implements GameHost {
     this.clearTimer();
     this.currentLog = this.logs[this.logIndex] ?? '';
     const last = this.logIndex >= this.logs.length - 1;
+    const cue = this.cueForCurrentLog();
     this.refresh();
+    this.paintStrike(cue);
     const wait = readDelay(this.currentLog, this.fast);
     if (!last) this.later(wait, () => {
       this.logIndex += 1;
@@ -1390,10 +1399,58 @@ export class Game implements GameHost {
     this.logsDone = true;
     this.logWait = null;
     this.logPaused = false;
+    this.clearFx();
     const callback = this.afterLogs;
     this.afterLogs = null;
     callback?.();
     this.refresh();
+  }
+
+  private cueForCurrentLog(): BattleCue | null {
+    if (this.mode !== 'battle' || !this.battle) return null;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    if (!mine || !foe) return null;
+    const read = readBattleCue(this.currentLog, {
+      player: getSpecies(mine.speciesId).name,
+      foe: getSpecies(foe.speciesId).name,
+      playerType: aspectOf(mine),
+      foeType: aspectOf(foe),
+    }, this.cueMemory);
+    this.cueMemory = read.memory;
+    return read.cue;
+  }
+
+  private paintStrike(cue: BattleCue | null): void {
+    if (!cue || (cue.kind !== 'physical' && cue.kind !== 'magic') || !cue.actor || !cue.target) return;
+    const actor = this.overlay.querySelector<HTMLElement>(`[data-side="${cue.actor}"]`);
+    const target = this.overlay.querySelector<HTMLElement>(`[data-side="${cue.target}"]`);
+    actor?.setAttribute('data-strike', cue.kind);
+    const fx = target?.querySelector<HTMLElement>('.battle-fx');
+    if (fx) {
+      fx.dataset.fx = cue.kind;
+      fx.style.setProperty('--fx', elementColor(cue.element));
+    }
+    const gen = ++this.fxGen;
+    window.clearTimeout(this.fxTimer);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.fxTimer = window.setTimeout(() => {
+      if (gen !== this.fxGen) return;
+      this.clearFx();
+    }, reduced ? 0 : 460);
+  }
+
+  private clearFx(): void {
+    this.fxGen += 1;
+    if (this.fxTimer) {
+      window.clearTimeout(this.fxTimer);
+      this.fxTimer = 0;
+    }
+    this.overlay.querySelectorAll<HTMLElement>('[data-strike]').forEach((el) => el.removeAttribute('data-strike'));
+    this.overlay.querySelectorAll<HTMLElement>('.battle-fx').forEach((el) => {
+      el.dataset.fx = '';
+      el.style.removeProperty('--fx');
+    });
   }
 
   private later(ms: number, fn: () => void): void {
@@ -1420,6 +1477,7 @@ export class Game implements GameHost {
 
   private abandonTimedWork(): void {
     this.clearTimer();
+    this.clearFx();
     this.logWait = null;
     this.logPaused = false;
     this.afterLogs = null;
