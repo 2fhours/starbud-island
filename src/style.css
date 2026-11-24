@@ -473,13 +473,17 @@ body:not([data-mode="explore"]) .build-tag {
 }
 .battle-field .portrait-frame.portrait-stage.battle-actor {
   position: relative;
-  width: 80px;
-  height: 112px;
+  width: 72px;
+  height: 104px;
   max-width: 38%;
   max-height: none;
   aspect-ratio: auto;
   align-self: flex-end;
   z-index: 1;
+}
+.battle-field .portrait-frame.portrait-stage.battle-actor[data-side="player"] {
+  width: 88px;
+  height: 120px;
 }
 .battle-motion,
 .portrait-facing,
@@ -692,8 +696,9 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .battle-top .type { padding: 0 6px; }
   .battle-sheet .status-row { margin: 0; }
   .battle-sheet .status-row:empty { display: none; }
-  .battle-field { height: 116px; min-height: 116px; }
-  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 72px; height: 108px; }
+  .battle-field { height: 112px; min-height: 112px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 64px; height: 92px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor[data-side="player"] { width: 76px; height: 108px; }
   .battle-sheet .log { flex: 0 0 auto; height: 32px; min-height: 32px; max-height: 36px; margin: 0; overflow: auto; }
   .battle-sheet .battle-bottom { flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); align-items: center; }
 }
@@ -729,8 +734,9 @@ body:not([data-mode="explore"]) .build-tag {
   .battle-sheet .sheet-body { display: flex; flex-direction: column; gap: 6px; }
   .battle-sheet .stage { height: auto; min-height: 0; margin: 0; flex: 0 0 auto; padding: 12px 14px; border-radius: 12px; overflow: visible; }
   .battle-stage { min-height: 0; }
-  .battle-field { height: 96px; min-height: 96px; }
-  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 60px; height: 90px; }
+  .battle-field { height: 92px; min-height: 92px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor { width: 52px; height: 76px; }
+  .battle-field .portrait-frame.portrait-stage.battle-actor[data-side="player"] { width: 62px; height: 88px; }
   .battle-sheet .battle-top h2 { font-size: 15px; line-height: 1.15; margin: 0; }
   .battle-sheet .battle-top .eyebrow,
   .battle-sheet .battle-top small { font-size: 11px; line-height: 1.15; }
