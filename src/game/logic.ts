@@ -34,6 +34,15 @@ export function maxMp(mon: Mon): number {
   return profile(mon).maxMp;
 }
 
+/** 只检查数据是否越界，不在这里截断。界面应按真实值显示，方便发现错误写入。 */
+export function vitalOverflow(mon: Mon): string | null {
+  const hp = maxHp(mon);
+  const mp = maxMp(mon);
+  if (mon.hp > hp) return `体力 ${mon.hp}/${hp}`;
+  if ((mon.mp ?? 0) > mp) return `法力 ${mon.mp ?? 0}/${mp}`;
+  return null;
+}
+
 export function speedPoint(mon: Mon): number {
   return Math.max(1, Math.floor(profile(mon).core.spd * stageMul(mon.stages.spd)));
 }

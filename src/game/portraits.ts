@@ -1,3 +1,4 @@
+import { BACK_READ, backMirror } from './facing';
 import type { SpeciesId } from './types';
 
 /** Static standing illustrations in public/portraits. Not stats and not formulas. */
@@ -109,10 +110,16 @@ export function actorFor(label: string): ActorId | null {
   return ACTOR_LABELS[label] ?? null;
 }
 
-export function speciesPortraitHtml(id: SpeciesId, fit: SpeciesPortraitFit, faint = false, facing: PortraitFacing = 'front'): string {
+export function speciesPortraitHtml(id: SpeciesId, fit: SpeciesPortraitFit, faint = false, facing: PortraitFacing = 'front', slot?: 'player' | 'foe'): string {
   const src = speciesFacingSrc(id, facing);
   const fallbackFit = fit === 'stage' ? 'stage' : 'card';
-  return `<span class="portrait-frame portrait-${fit}${faint ? ' is-faint' : ''}"><img class="standing" alt="" draggable="false" src="${src}" data-species="${id}" data-facing="${facing}" data-fit="${fallbackFit}" data-faint="${faint ? '1' : '0'}" /></span>`;
+  const img = `<img class="standing" alt="" draggable="false" src="${src}" data-species="${id}" data-facing="${facing}" data-fit="${fallbackFit}" data-faint="${faint ? '1' : '0'}" />`;
+  if (!slot) {
+    return `<span class="portrait-frame portrait-${fit}${faint ? ' is-faint' : ''}">${img}</span>`;
+  }
+  const mirror = slot === 'player' && facing === 'back' && backMirror(id) ? '1' : '0';
+  const gaze = slot === 'player' && facing === 'back' ? BACK_READ[id].gaze : 'front';
+  return `<span class="portrait-frame portrait-${fit}${faint ? ' is-faint' : ''} battle-actor" data-side="${slot}" data-gaze="${gaze}"><span class="battle-motion"><span class="portrait-facing" data-mirror="${mirror}">${img}</span></span><span class="battle-fx" data-fx=""></span></span>`;
 }
 
 export function actorPortraitHtml(id: ActorId, compact = false): string {

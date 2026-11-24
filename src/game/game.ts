@@ -3,6 +3,7 @@ import { playerMove, playerRun, playerSwitch, prepareBattle, resolveCatch, type 
 import { ISLAND_TRIAL, RIDGE_TRIAL, bossScript, getMove, getSpecies, introScript, practiceScript } from './data';
 import { Input } from './input';
 import {
+  aspectOf,
   catchProbability,
   cloneMon,
   commitEvolution,
@@ -18,6 +19,7 @@ import {
   judgeTiming,
   makeMon,
   maxHp,
+  maxMp,
   readDelay,
   receiveMon,
   setLead,
@@ -26,6 +28,7 @@ import {
   topUpBalls,
 } from './logic';
 import { basicStrike } from './skills';
+import { applyShownCue, blankCueMemory, elementColor, readBattleCue, type BattleCue, type CueMemory, type ShownVitals } from './fx';
 import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
@@ -97,6 +100,7 @@ export class Game implements GameHost {
   selectedStarter: SpeciesId | null = null;
   nearbyLabel: string | null = null;
   shakeSuccess = false;
+  shown: ShownVitals | null = null;
   skillQuery = '';
   skillType = 'all';
   skillTier = 'all';
@@ -148,6 +152,10 @@ export class Game implements GameHost {
   private inspectTimer = 0;
   private inspectX = 0;
   private inspectY = 0;
+  private holdingKey = '';
+  private cueMemory: CueMemory = blankCueMemory();
+  private fxTimer = 0;
+  private fxGen = 0;
   private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
@@ -1102,6 +1110,7 @@ export class Game implements GameHost {
 
   private doMove(index: number): void {
     if (!this.canAct || !this.battle) return;
+    this.captureShown();
     const logs = playerMove(this.battle, index, () => this.rng());
     this.audio.play('hit');
     this.beginLogs(logs, () => {
@@ -1359,6 +1368,8 @@ export class Game implements GameHost {
     this.logIndex = 0;
     this.logsDone = false;
     this.afterLogs = after;
+    this.cueMemory = blankCueMemory();
+    this.clearFx();
     this.revealLog();
   }
 
@@ -1366,7 +1377,9 @@ export class Game implements GameHost {
     this.clearTimer();
     this.currentLog = this.logs[this.logIndex] ?? '';
     const last = this.logIndex >= this.logs.length - 1;
+    const cue = this.cueForCurrentLog();
     this.refresh();
+    this.paintStrike(cue);
     const wait = readDelay(this.currentLog, this.fast);
     if (!last) this.later(wait, () => {
       this.logIndex += 1;
@@ -1389,10 +1402,104 @@ export class Game implements GameHost {
     this.logsDone = true;
     this.logWait = null;
     this.logPaused = false;
+    this.shown = null;
+    this.clearFx();
     const callback = this.afterLogs;
     this.afterLogs = null;
     callback?.();
     this.refresh();
+  }
+
+  private cueForCurrentLog(): BattleCue | null {
+    if (this.mode !== 'battle' || !this.battle) return null;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    if (!mine || !foe) return null;
+    const read = readBattleCue(this.currentLog, {
+      player: getSpecies(mine.speciesId).name,
+      foe: getSpecies(foe.speciesId).name,
+      playerType: aspectOf(mine),
+      foeType: aspectOf(foe),
+    }, this.cueMemory);
+    this.cueMemory = read.memory;
+    this.applyCue(read.cue);
+    return read.cue;
+  }
+
+  private captureShown(): void {
+    if (!this.battle) return;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    if (!mine || !foe) return;
+    const mineState = this.battle.runtime[mine.uid];
+    const foeState = this.battle.runtime[foe.uid];
+    this.shown = {
+      playerHp: mine.hp,
+      foeHp: foe.hp,
+      playerMp: mine.mp,
+      foeMp: foe.mp,
+      playerShield: mineState?.shield ?? 0,
+      foeShield: foeState?.shield ?? 0,
+    };
+  }
+
+  private applyCue(cue: BattleCue): void {
+    if (!this.shown || !this.battle) return;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    if (!mine || !foe) return;
+    this.shown = applyShownCue(this.shown, cue, {
+      playerHp: maxHp(mine),
+      foeHp: maxHp(foe),
+      playerMp: maxMp(mine),
+      foeMp: maxMp(foe),
+    });
+  }
+
+  private paintStrike(cue: BattleCue | null): void {
+    if (!cue || cue.kind === 'none') return;
+    const actor = cue.actor ? this.overlay.querySelector<HTMLElement>(`[data-side="${cue.actor}"]`) : null;
+    const target = cue.target ? this.overlay.querySelector<HTMLElement>(`[data-side="${cue.target}"]`) : null;
+    if (cue.kind === 'physical' || cue.kind === 'magic') {
+      actor?.setAttribute('data-strike', cue.kind);
+      const fx = target?.querySelector<HTMLElement>('.battle-fx');
+      if (fx) {
+        fx.dataset.fx = cue.kind;
+        fx.style.setProperty('--fx', elementColor(cue.element));
+      }
+    }
+    if (cue.kind === 'hurt' || cue.kind === 'crit') target?.setAttribute('data-hit', cue.kind);
+    if (cue.kind === 'heal' || cue.kind === 'shield' || cue.kind === 'buff') target?.setAttribute('data-glow', cue.kind);
+    if (cue.text && target) {
+      const note = document.createElement('span');
+      note.className = `floater floater-${cue.kind}`;
+      note.textContent = cue.text;
+      target.appendChild(note);
+    }
+    const gen = ++this.fxGen;
+    window.clearTimeout(this.fxTimer);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;
+    this.fxTimer = window.setTimeout(() => {
+      if (gen !== this.fxGen) return;
+      this.clearFx();
+    }, cue.kind === 'physical' || cue.kind === 'magic' ? 460 : 720);
+  }
+
+  private clearFx(): void {
+    this.fxGen += 1;
+    if (this.fxTimer) {
+      window.clearTimeout(this.fxTimer);
+      this.fxTimer = 0;
+    }
+    this.overlay.querySelectorAll<HTMLElement>('[data-strike]').forEach((el) => el.removeAttribute('data-strike'));
+    this.overlay.querySelectorAll<HTMLElement>('[data-hit]').forEach((el) => el.removeAttribute('data-hit'));
+    this.overlay.querySelectorAll<HTMLElement>('[data-glow]').forEach((el) => el.removeAttribute('data-glow'));
+    this.overlay.querySelectorAll('.floater').forEach((el) => el.remove());
+    this.overlay.querySelectorAll<HTMLElement>('.battle-fx').forEach((el) => {
+      el.dataset.fx = '';
+      el.style.removeProperty('--fx');
+    });
   }
 
   private later(ms: number, fn: () => void): void {
@@ -1419,10 +1526,12 @@ export class Game implements GameHost {
 
   private abandonTimedWork(): void {
     this.clearTimer();
+    this.clearFx();
     this.logWait = null;
     this.logPaused = false;
     this.afterLogs = null;
     this.logsDone = true;
+    this.shown = null;
     this.stopMapDrag();
   }
 
@@ -1531,8 +1640,22 @@ export class Game implements GameHost {
     this.saveSummaryText = `${saved.name} · 图鉴 ${caught}/${total} · ${formatPlay(saved.playMs)}`;
   }
 
+  hpLimit(mon: Mon): number {
+    return maxHp(mon);
+  }
+
+  mpLimit(mon: Mon): number {
+    return maxMp(mon);
+  }
+
+  /** 测试改完当场数据后重画，不改结算。 */
+  repaint(): void {
+    this.refresh();
+  }
+
   private refresh(): void {
     document.body.dataset.mode = this.mode;
+    if (this.mode !== 'explore') document.getElementById('toast')?.classList.remove('show');
     renderOverlay(this.overlay, this);
     this.hudSig = '';
     this.placeChrome();
@@ -1548,12 +1671,24 @@ export class Game implements GameHost {
         const left = document.querySelector('.hud-left')?.getBoundingClientRect();
         const right = document.querySelector('.hud-right')?.getBoundingClientRect();
         const below = Math.max(left?.bottom ?? 0, right?.bottom ?? 0);
-        if (below >= 48) {
-          dock.style.top = `${Math.ceil(below + 10)}px`;
-          dock.style.left = '50%';
+        const dockWidth = Math.max(dock.getBoundingClientRect().width, 120);
+        const gap = (right?.left ?? 0) - (left?.right ?? 0);
+        if (left && right && gap >= dockWidth + 16) {
+          const mid = (left.right + right.left) / 2;
+          dock.style.top = `${Math.ceil(Math.min(left.top, right.top))}px`;
+          dock.style.left = `${Math.round(mid)}px`;
           dock.style.right = 'auto';
           dock.style.bottom = 'auto';
           dock.style.transform = 'translateX(-50%)';
+        } else if (below >= 48 && right) {
+          const rightEdge = Math.min(right.right, window.innerWidth - 8);
+          const leftLimit = Math.max(8, (left?.right ?? 0) + 8);
+          const leftPos = Math.max(leftLimit, rightEdge - dockWidth);
+          dock.style.top = `${Math.ceil(below + 8)}px`;
+          dock.style.left = `${Math.round(leftPos)}px`;
+          dock.style.right = 'auto';
+          dock.style.bottom = 'auto';
+          dock.style.transform = 'none';
         }
       } else {
         dock.style.top = '';
@@ -1741,8 +1876,10 @@ export class Game implements GameHost {
       const move = button.dataset.act === 'battle-basic'
         ? basicStrike(mine.aspect ?? 'yangmu')
         : getMove((mine.moves ?? [])[Number(button.dataset.arg)] ?? '');
+      this.holdingKey = `${button.dataset.act}:${button.dataset.arg ?? ''}`;
       this.currentLog = move.desc;
       this.refresh();
+      this.markHolding();
     }, 450);
   }
 
@@ -1754,9 +1891,18 @@ export class Game implements GameHost {
     this.suppressClick = true;
   }
 
+  private markHolding(): void {
+    if (!this.holdingKey) return;
+    const [act, arg] = this.holdingKey.split(':');
+    const button = [...this.overlay.querySelectorAll<HTMLElement>('[data-act]')].find((el) => el.dataset.act === act && (el.dataset.arg ?? '') === (arg ?? ''));
+    button?.classList.add('is-holding');
+  }
+
   private cancelInspect(cancelled: boolean): void {
     window.clearTimeout(this.inspectTimer);
     this.inspectTimer = 0;
+    this.holdingKey = '';
+    this.overlay.querySelectorAll('.is-holding').forEach((el) => el.classList.remove('is-holding'));
     if (cancelled) this.suppressClick = true;
   }
 

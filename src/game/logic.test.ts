@@ -10,6 +10,7 @@ import {
   judgeTiming,
   makeMon,
   maxHp,
+  vitalOverflow,
   performMove,
   currentObjective,
   grandmaFollowup,
@@ -25,6 +26,18 @@ import { createWorld, isWalkable, pathExists, tileCenter } from './world';
 const fixed = () => 0.5;
 
 describe('芽灵与属性', () => {
+
+  it('生成和治疗后的体力不超过上限，越界只被检查出来、不在显示层截断', () => {
+    const mon = makeMon('luzhu', 3, 1, true);
+    expect(mon.hp).toBe(maxHp(mon));
+    expect(maxHp(mon)).toBeGreaterThan(0);
+    expect(vitalOverflow(mon)).toBeNull();
+    healTeam([mon]);
+    expect(vitalOverflow(mon)).toBeNull();
+    const over = { ...mon, hp: maxHp(mon) + 17 };
+    expect(vitalOverflow(over)).toBe(`体力 ${maxHp(mon) + 17}/${maxHp(mon)}`);
+    expect(over.hp).toBe(maxHp(mon) + 17);
+  });
   it('至少 8 种生物，每种两个技能', () => {
     expect(SPECIES_LIST.length).toBeGreaterThanOrEqual(8);
     for (const species of SPECIES_LIST) {
