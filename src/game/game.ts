@@ -19,6 +19,7 @@ import {
   judgeTiming,
   makeMon,
   maxHp,
+  maxMp,
   readDelay,
   receiveMon,
   setLead,
@@ -99,6 +100,7 @@ export class Game implements GameHost {
   selectedStarter: SpeciesId | null = null;
   nearbyLabel: string | null = null;
   shakeSuccess = false;
+  shown: { playerHp: number; foeHp: number; playerMp: number; foeMp: number } | null = null;
   skillQuery = '';
   skillType = 'all';
   skillTier = 'all';
@@ -1108,6 +1110,7 @@ export class Game implements GameHost {
 
   private doMove(index: number): void {
     if (!this.canAct || !this.battle) return;
+    this.captureShown();
     const logs = playerMove(this.battle, index, () => this.rng());
     this.audio.play('hit');
     this.beginLogs(logs, () => {
@@ -1399,6 +1402,7 @@ export class Game implements GameHost {
     this.logsDone = true;
     this.logWait = null;
     this.logPaused = false;
+    this.shown = null;
     this.clearFx();
     const callback = this.afterLogs;
     this.afterLogs = null;
@@ -1418,26 +1422,54 @@ export class Game implements GameHost {
       foeType: aspectOf(foe),
     }, this.cueMemory);
     this.cueMemory = read.memory;
+    this.applyCue(read.cue);
     return read.cue;
   }
 
+  private captureShown(): void {
+    if (!this.battle) return;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    this.shown = { playerHp: mine.hp, foeHp: foe.hp, playerMp: mine.mp, foeMp: foe.mp };
+  }
+
+  private applyCue(cue: BattleCue): void {
+    if (!this.shown) return;
+    const cap = (value: number, max: number) => Math.max(0, Math.min(max, value));
+    if (cue.hpSide === 'player') this.shown.playerHp = cap(this.shown.playerHp + cue.hpDelta, maxHp(this.battle!.player[this.battle!.pIndex]));
+    if (cue.hpSide === 'foe') this.shown.foeHp = cap(this.shown.foeHp + cue.hpDelta, maxHp(this.battle!.foes[this.battle!.fIndex]));
+    if (cue.mpSide === 'player') this.shown.playerMp = cap(this.shown.playerMp + cue.mpDelta, maxMp(this.battle!.player[this.battle!.pIndex]));
+    if (cue.mpSide === 'foe') this.shown.foeMp = cap(this.shown.foeMp + cue.mpDelta, maxMp(this.battle!.foes[this.battle!.fIndex]));
+  }
+
   private paintStrike(cue: BattleCue | null): void {
-    if (!cue || (cue.kind !== 'physical' && cue.kind !== 'magic') || !cue.actor || !cue.target) return;
-    const actor = this.overlay.querySelector<HTMLElement>(`[data-side="${cue.actor}"]`);
-    const target = this.overlay.querySelector<HTMLElement>(`[data-side="${cue.target}"]`);
-    actor?.setAttribute('data-strike', cue.kind);
-    const fx = target?.querySelector<HTMLElement>('.battle-fx');
-    if (fx) {
-      fx.dataset.fx = cue.kind;
-      fx.style.setProperty('--fx', elementColor(cue.element));
+    if (!cue || cue.kind === 'none') return;
+    const actor = cue.actor ? this.overlay.querySelector<HTMLElement>(`[data-side="${cue.actor}"]`) : null;
+    const target = cue.target ? this.overlay.querySelector<HTMLElement>(`[data-side="${cue.target}"]`) : null;
+    if (cue.kind === 'physical' || cue.kind === 'magic') {
+      actor?.setAttribute('data-strike', cue.kind);
+      const fx = target?.querySelector<HTMLElement>('.battle-fx');
+      if (fx) {
+        fx.dataset.fx = cue.kind;
+        fx.style.setProperty('--fx', elementColor(cue.element));
+      }
+    }
+    if (cue.kind === 'hurt' || cue.kind === 'crit') target?.setAttribute('data-hit', cue.kind);
+    if (cue.kind === 'heal' || cue.kind === 'shield' || cue.kind === 'buff') target?.setAttribute('data-glow', cue.kind);
+    if (cue.text && target) {
+      const note = document.createElement('span');
+      note.className = `floater floater-${cue.kind}`;
+      note.textContent = cue.text;
+      target.appendChild(note);
     }
     const gen = ++this.fxGen;
     window.clearTimeout(this.fxTimer);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;
     this.fxTimer = window.setTimeout(() => {
       if (gen !== this.fxGen) return;
       this.clearFx();
-    }, reduced ? 0 : 460);
+    }, cue.kind === 'physical' || cue.kind === 'magic' ? 460 : 720);
   }
 
   private clearFx(): void {
@@ -1447,6 +1479,9 @@ export class Game implements GameHost {
       this.fxTimer = 0;
     }
     this.overlay.querySelectorAll<HTMLElement>('[data-strike]').forEach((el) => el.removeAttribute('data-strike'));
+    this.overlay.querySelectorAll<HTMLElement>('[data-hit]').forEach((el) => el.removeAttribute('data-hit'));
+    this.overlay.querySelectorAll<HTMLElement>('[data-glow]').forEach((el) => el.removeAttribute('data-glow'));
+    this.overlay.querySelectorAll('.floater').forEach((el) => el.remove());
     this.overlay.querySelectorAll<HTMLElement>('.battle-fx').forEach((el) => {
       el.dataset.fx = '';
       el.style.removeProperty('--fx');
@@ -1482,6 +1517,7 @@ export class Game implements GameHost {
     this.logPaused = false;
     this.afterLogs = null;
     this.logsDone = true;
+    this.shown = null;
     this.stopMapDrag();
   }
 

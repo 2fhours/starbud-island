@@ -49,6 +49,7 @@ export interface GameHost {
   shakeSuccess: boolean;
   muted: boolean;
   battle: Battle | null;
+  shown: { playerHp: number; foeHp: number; playerMp: number; foeMp: number } | null;
   encounterView: EncounterView | null;
   captureView: CaptureView | null;
   signView: { title: string; text: string } | null;
@@ -276,9 +277,13 @@ function battleSheet(host: GameHost): string {
   const foeAspect = aspectOf(foe);
   const foeState = battle.runtime[foe.uid];
   const order = actionOrder(mine) >= actionOrder(foe) ? '我方先出手' : '对方先出手';
+  const foeHp = host.shown?.foeHp ?? foe.hp;
+  const foeMp = host.shown?.foeMp ?? foe.mp;
+  const myHp = host.shown?.playerHp ?? mine.hp;
+  const myMp = host.shown?.playerMp ?? mine.mp;
   const foeSlot = portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'), 'foe');
   const mineSlot = portrait(mine.speciesId, mine.hp <= 0, 'stage', battleFacing('player'), 'player');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${resourceRow(foe.hp, maxHp(foe), foe.mp, maxMp(foe))}<div class="status-row">${fighterTags(foeState)}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><p class="turn-order">${order}</p><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${resourceRow(mine.hp, maxHp(mine), mine.mp, maxMp(mine))}<div class="status-row">${fighterTags(mineState)}</div></div></div>`;
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${resourceRow(foeHp, maxHp(foe), foeMp, maxMp(foe))}<div class="status-row">${fighterTags(foeState)}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><p class="turn-order">${order}</p><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${resourceRow(myHp, maxHp(mine), myMp, maxMp(mine))}<div class="status-row">${fighterTags(mineState)}</div></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 
