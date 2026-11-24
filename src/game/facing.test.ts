@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BACK_READ, backGaze, backMirror, leftSpecies, rearSpecies } from './facing';
+import { BACK_READ, backGaze, backMirror, leftSpecies, rearSpecies, rightSpecies } from './facing';
 import { SPECIES_PORTRAIT_IDS, speciesPortraitHtml } from './portraits';
 import type { SpeciesId } from './types';
 
@@ -9,12 +9,17 @@ describe('背面朝向', () => {
     expect(new Set(Object.keys(BACK_READ))).toEqual(new Set(SPECIES_PORTRAIT_IDS));
     const gazes = new Set(Object.values(BACK_READ).map((row) => row.gaze));
     expect(gazes.has('left')).toBe(true);
-    expect(gazes.has('rear')).toBe(true);
+    expect(gazes.has('rear')).toBe(false);
     expect(gazes.has('right')).toBe(true);
     expect(leftSpecies()).toEqual(['yanwei', 'huowen', 'chiyan', 'xiwen', 'chaowen', 'canglan']);
     expect(backGaze('lujiao')).toBe('right');
     expect(backMirror('lujiao')).toBe(false);
-    expect(rearSpecies()).toHaveLength(23);
+    expect(backGaze('luzhu')).toBe('right');
+    expect(backMirror('luzhu')).toBe(false);
+    expect(backMirror('taibei')).toBe(false);
+    expect(backMirror('senbei')).toBe(false);
+    expect(rearSpecies()).toHaveLength(0);
+    expect(rightSpecies()).toHaveLength(26);
     for (const id of Object.keys(BACK_READ) as SpeciesId[]) {
       expect(backMirror(id)).toBe(backGaze(id) === 'left');
       expect(BACK_READ[id].why.length).toBeGreaterThan(4);

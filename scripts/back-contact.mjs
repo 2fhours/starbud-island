@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 
@@ -35,8 +35,10 @@ const html = `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="
 </style><div class="grid">${rows.map(card).join('')}</div>`;
 
 await mkdir(new URL('.', `file://${out}`).pathname, { recursive: true }).catch(() => {});
+const chromePath = [process.env.CHROME_PATH, '/usr/local/bin/google-chrome', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable'].find((path) => path && existsSync(path));
+if (!chromePath) throw new Error('没有找到 Chrome');
 const browser = await puppeteer.launch({
-  executablePath: '/usr/local/bin/google-chrome',
+  executablePath: chromePath,
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });

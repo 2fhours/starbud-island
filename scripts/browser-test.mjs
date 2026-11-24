@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
@@ -51,6 +51,57 @@ async function assertExploreMusicDock(page, width, height) {
     if (Math.abs(mid - gapMid) > 12 || dock.top + 8 < Math.min(left.top, right.top) - 8) {
       throw new Error(`宽屏音乐控件没有放进两卡空隙 ${width}x${height} ${JSON.stringify(info)}`);
     }
+  }
+}
+
+
+async function assertBattleVitals(page, label) {
+  const result = await page.evaluate(() => {
+    const game = window.__xingya;
+    const battle = game?.battle;
+    if (!game || !battle) return { error: '不在战斗里' };
+    const read = (root) => {
+      const text = root?.textContent ?? '';
+      const hp = text.match(/体力\s*(\d+)\s*\/\s*(\d+)/);
+      const mp = text.match(/法力\s*(\d+)\s*\/\s*(\d+)/);
+      return {
+        hp: hp ? { cur: Number(hp[1]), max: Number(hp[2]) } : null,
+        mp: mp ? { cur: Number(mp[1]), max: Number(mp[2]) } : null,
+      };
+    };
+    const ui = {
+      foe: read(document.querySelector('.battle-top')),
+      mine: read(document.querySelector('.battle-bottom')),
+    };
+    const liveOf = (mon) => ({ hp: mon.hp, maxHp: game.hpLimit(mon), mp: mon.mp ?? 0, maxMp: game.mpLimit(mon) });
+    const data = {
+      foe: liveOf(battle.foes[battle.fIndex]),
+      mine: liveOf(battle.player[battle.pIndex]),
+    };
+    const problems = [];
+    const check = (name, pair, live) => {
+      if (!pair?.hp || !pair?.mp) {
+        problems.push(`${name} 缺少体力或法力`);
+        return;
+      }
+      if (pair.hp.cur > pair.hp.max) problems.push(`${name} 界面体力 ${pair.hp.cur}/${pair.hp.max}`);
+      if (pair.mp.cur > pair.mp.max) problems.push(`${name} 界面法力 ${pair.mp.cur}/${pair.mp.max}`);
+      if (live.hp > live.maxHp) problems.push(`${name} 数据体力 ${live.hp}/${live.maxHp}`);
+      if (live.mp > live.maxMp) problems.push(`${name} 数据法力 ${live.mp}/${live.maxMp}`);
+      if (game.canAct && game.logsDone && (pair.hp.cur !== live.hp || pair.hp.max !== live.maxHp)) {
+        problems.push(`${name} 界面与数据不一致 ${JSON.stringify({ pair, live })}`);
+      }
+    };
+    check('敌方', ui.foe, data.foe);
+    check('我方', ui.mine, data.mine);
+    const mineSrc = document.querySelector('[data-side="player"] img.standing')?.getAttribute('src') ?? '';
+    return { problems, ui, data, mineSrc };
+  });
+  if (result.error || result.problems?.length) {
+    throw new Error(`${label} 体力越界或界面与数据不符 ${JSON.stringify(result)}`);
+  }
+  if (label.includes('叶角鹿') && !result.mineSrc?.includes('lujiao-back.jpg')) {
+    throw new Error(`${label} 我方不是叶角鹿背面 ${result.mineSrc}`);
   }
 }
 
@@ -704,11 +755,15 @@ try {
   if (battleSides.foeMirror !== '0' || battleSides.foeTransform !== 'none' || !battleSides.motionParent || !battleSides.fxOutside || !battleSides.nameOutside || !battleSides.playerLeft) {
     throw new Error(`朝向层或站位不对 ${JSON.stringify(battleSides)}`);
   }
+  await assertBattleVitals(page, '开场战斗叶角鹿');
   await page.screenshot({ path: `${shotDir}/06-battle.png` });
   await page.setViewport({ width: 320, height: 568 });
   await sleep(150);
   await page.evaluate(() => {
-    window.__xingya.battle.foes[window.__xingya.battle.fIndex].hp = 80;
+    const battle = window.__xingya.battle;
+    const foe = battle.foes[battle.fIndex];
+    foe.hp = window.__xingya.hpLimit(foe);
+    window.__xingya.repaint();
   });
   await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
   const gestureStart = await page.evaluate(() => {
@@ -774,9 +829,13 @@ try {
   await page.evaluate(() => {
     const battle = window.__xingya.battle;
     const me = battle.player[battle.pIndex];
-    me.hp = Math.max(me.hp, 40);
-    battle.foes[battle.fIndex].hp = 40;
+    const foe = battle.foes[battle.fIndex];
+    const myMax = window.__xingya.hpLimit(me);
+    const foeMax = window.__xingya.hpLimit(foe);
+    me.hp = Math.min(myMax, Math.max(me.hp, Math.min(40, myMax)));
+    foe.hp = Math.min(40, foeMax);
     battle.phase = 'input';
+    window.__xingya.repaint();
   });
   await page.setViewport({ width: 1280, height: 800 });
   const battleControls = ['[data-act="battle-move"]', '[data-act="battle-catch"]', '[data-act="battle-run"]', '[data-act="toggle-switch"]', '#music-dock', '#build-tag'];
@@ -792,6 +851,7 @@ try {
       });
     });
     if (!foeOnScreen) throw new Error(`敌方信息没有完整出现在画面里 ${width}x${height}`);
+    await assertBattleVitals(page, `战斗 ${width}x${height}叶角鹿`);
     await page.screenshot({ path: `${shotDir}/battle-${width}x${height}.png` });
     const shell = await page.evaluate(() => {
       const sheet = document.querySelector('.sheet').getBoundingClientRect();
@@ -884,13 +944,14 @@ try {
     const game = window.__xingya;
     const battle = game.battle;
     if (!battle || game.mode !== 'battle') return;
-    battle.player[battle.pIndex].hp = Math.max(20, battle.player[battle.pIndex].hp);
+    const me = battle.player[battle.pIndex];
+    me.hp = Math.min(game.hpLimit(me), Math.max(20, me.hp));
     battle.foes[battle.fIndex].hp = 1;
     battle.phase = 'input';
     game.rngQueue = Array(8).fill(0.5);
-    game.handle('battle-move', '0');
+    game.handle('battle-basic');
   });
-  await page.waitForFunction(() => window.__xingya.mode === 'explore' && window.__xingya.play.team[0].level >= 5, { timeout: 5000 });
+  await page.waitForFunction(() => window.__xingya.mode === 'explore' && window.__xingya.play.team[0].level >= 5, { timeout: 10000 });
   const afterBattle = await page.evaluate(() => ({
     mode: window.__xingya.mode,
     level: window.__xingya.play.team[0].level,
@@ -1133,7 +1194,7 @@ try {
       return button?.getAttribute('data-arg');
     }).filter(Boolean);
     mon.moves = picks;
-    mon.hp = 999;
+    mon.hp = window.__xingya.hpLimit(mon);
   });
   await page.click('[data-arg="team"]');
   await page.keyboard.press('Escape');
@@ -1143,17 +1204,18 @@ try {
     const wild = game.wilds.find((item) => item.speciesId === 'yanke');
     for (const other of game.wilds) if (other !== wild) other.hidden = true;
     wild.hidden = false;
-    wild.mon.hp = 500;
+    wild.mon.hp = game.hpLimit(wild.mon);
     game.play.x = wild.x;
     game.play.y = wild.y;
-    game.play.team[0].hp = 200;
+    game.play.team[0].hp = game.hpLimit(game.play.team[0]);
   });
   await page.waitForSelector('[data-act="encounter-fight"]', { timeout: 4000 });
   await page.click('[data-act="encounter-fight"]');
   await page.waitForSelector('[data-act="battle-move"]');
+  await page.waitForFunction(() => window.__xingya.canAct, { timeout: 8000 });
   const effectLogs = [];
   for (let i = 0; i < 4; i += 1) {
-    await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
+    await page.waitForFunction(() => window.__xingya.canAct, { timeout: 8000 });
     const button = await page.$(`[data-act="battle-move"][data-arg="${i}"]`);
     if (!button) break;
     await button.click();
@@ -1195,6 +1257,7 @@ try {
   process.exitCode = 1;
 } finally {
   await Promise.race([browser.close(), sleep(1500)]);
-  preview.kill('SIGKILL');
+  try { preview.kill('SIGKILL'); } catch { /* already gone */ }
+  try { execSync(`pkill -KILL -f "vite preview --host 127.0.0.1 --port ${port}"`, { stdio: 'ignore' }); } catch { /* no leftover */ }
   setTimeout(() => process.exit(process.exitCode ?? 0), 200);
 }

@@ -1640,6 +1640,19 @@ export class Game implements GameHost {
     this.saveSummaryText = `${saved.name} · 图鉴 ${caught}/${total} · ${formatPlay(saved.playMs)}`;
   }
 
+  hpLimit(mon: Mon): number {
+    return maxHp(mon);
+  }
+
+  mpLimit(mon: Mon): number {
+    return maxMp(mon);
+  }
+
+  /** 测试改完当场数据后重画，不改结算。 */
+  repaint(): void {
+    this.refresh();
+  }
+
   private refresh(): void {
     document.body.dataset.mode = this.mode;
     if (this.mode !== 'explore') document.getElementById('toast')?.classList.remove('show');

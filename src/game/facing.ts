@@ -10,9 +10,9 @@ export interface BackRead {
 
 /**
  * left：头或胸朝画面左侧，我方槽位只做水平翻转，使它朝向右侧敌方。
- * right：背面稿已经朝画面右侧，不翻转。这一批是叶角鹿、翠枝鹿、森冕鹿。
- * rear：正后方，看不出面朝哪边。不翻转。不能当成已经面向敌方。
- * 正后方 23 张若换成已经朝右的新背面，要把对应 gaze 改成 right，避免和翻转叠在一起。
+ * right：背面稿已经朝画面右侧，不翻转。包括叶角鹿三体，以及 23 张新画的朝右背面。
+ * rear：正后方，看不出面朝哪边。不翻转。这一批已经没有。
+ * 这 23 张新背面不得再水平翻转，否则会和朝右稿叠成朝左。
  */
 export const BACK_READ: Record<SpeciesId, BackRead> = {
   lujiao: { gaze: 'right', why: '原稿头已经偏向画面右侧，尾巴也在右侧。再翻转会改成朝左。' },
@@ -24,29 +24,29 @@ export const BACK_READ: Record<SpeciesId, BackRead> = {
   xiwen: { gaze: 'left', why: '身体斜向画面左侧，水纹尾在右侧。' },
   chaowen: { gaze: 'left', why: '和汐纹獭同一朝向，头偏左，尾巴在右。' },
   canglan: { gaze: 'left', why: '和汐纹獭同一朝向，头偏左，尾巴在右。' },
-  luzhu: { gaze: 'rear', why: '正后方，左右对称，看不出面朝哪边。' },
-  linlu: { gaze: 'rear', why: '正后方，头顶水滴左右对称。' },
-  jinglu: { gaze: 'rear', why: '正后方，水滴和肩上的泡左右对称。' },
-  dianrong: { gaze: 'rear', why: '正后方。卷起的小尾不是头的朝向。' },
-  shanrong: { gaze: 'rear', why: '正后方。尾巴弯曲不是头的朝向。' },
-  tingrong: { gaze: 'rear', why: '正后方，额上的闪电左右对称。' },
-  yanke: { gaze: 'rear', why: '正后方的龟壳，头和尾都在中线。' },
-  panjia: { gaze: 'rear', why: '正后方。壳上偏左的叶子是花纹，不是面朝左侧。' },
-  fengling: { gaze: 'rear', why: '正后方，铃在背中线。' },
-  lingyu: { gaze: 'rear', why: '正后方，双铃在背中线。' },
-  yaoling: { gaze: 'rear', why: '正后方，双铃在背中线。' },
-  taibei: { gaze: 'rear', why: '正后方，苔背和耳朵左右对称。' },
-  senbei: { gaze: 'rear', why: '正后方，背上的花和果实不是朝向。' },
-  wudeng: { gaze: 'rear', why: '正后方，翅膀和触角左右对称。' },
-  wuhui: { gaze: 'rear', why: '正后方，四盏灯左右成对。' },
-  landeng: { gaze: 'rear', why: '正后方，灯在尾端中线。' },
-  yunyang: { gaze: 'rear', why: '正后方，双角左右对称。' },
-  lanjiao: { gaze: 'rear', why: '正后方，双角左右对称。' },
-  luoxing: { gaze: 'rear', why: '正后方，翼膜左右对称。' },
-  xingyi: { gaze: 'rear', why: '正后方，尾巴居中下垂。' },
-  liuxing: { gaze: 'rear', why: '正后方，翼膜和星尾左右对称。' },
-  hanquan: { gaze: 'rear', why: '头和躯干是正后方。尾巴甩向画面右侧，翻转只会把尾巴换边，不能变成面向敌方。' },
-  shuangquan: { gaze: 'rear', why: '和寒泉鲵一样，头是正后方，只有尾巴偏向一侧。' },
+  luzhu: { gaze: 'right', why: '新背面身体和远侧眼睛朝右，头的转幅较小，不再是正后方。不翻转。' },
+  linlu: { gaze: 'right', why: '同露珠蛙，远侧眼在右，头转幅较小。不翻转。' },
+  jinglu: { gaze: 'right', why: '同露珠蛙，远侧眼在右，头转幅较小。不翻转。' },
+  dianrong: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  shanrong: { gaze: 'right', why: '同电绒鼠，朝右。不翻转。' },
+  tingrong: { gaze: 'right', why: '同电绒鼠，朝右。不翻转。' },
+  yanke: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  panjia: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  fengling: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  lingyu: { gaze: 'right', why: '同风铃鸟，朝右。不翻转。' },
+  yaoling: { gaze: 'right', why: '同风铃鸟，朝右。不翻转。' },
+  taibei: { gaze: 'right', why: '新背面朝右。生成稿曾朝左，已在素材里纠正，代码不再翻转。' },
+  senbei: { gaze: 'right', why: '同苔背熊，朝右。生成稿曾朝左，已在素材里纠正，代码不再翻转。' },
+  wudeng: { gaze: 'right', why: '新背面朝右，头转幅很小，只看得到右侧一点眼睛。不翻转。' },
+  wuhui: { gaze: 'right', why: '朝右，头转幅比雾灯蛾稍明显。不翻转。' },
+  landeng: { gaze: 'right', why: '朝右，头转幅中等偏小。不翻转。' },
+  yunyang: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  lanjiao: { gaze: 'right', why: '同云岩羊，朝右。不翻转。' },
+  luoxing: { gaze: 'right', why: '新背面朝画面右侧。不翻转。' },
+  xingyi: { gaze: 'right', why: '同落星鼯，朝右。不翻转。' },
+  liuxing: { gaze: 'right', why: '同落星鼯，朝右。不翻转。' },
+  hanquan: { gaze: 'right', why: '身体朝右，头几乎不转，后脑仍占主要位置。不翻转。' },
+  shuangquan: { gaze: 'right', why: '同寒泉鲵，身体朝右，头转幅很小。不翻转。' },
 };
 
 export function backGaze(id: SpeciesId): BackGaze {
@@ -64,4 +64,8 @@ export function rearSpecies(): SpeciesId[] {
 
 export function leftSpecies(): SpeciesId[] {
   return (Object.keys(BACK_READ) as SpeciesId[]).filter((id) => BACK_READ[id].gaze === 'left');
+}
+
+export function rightSpecies(): SpeciesId[] {
+  return (Object.keys(BACK_READ) as SpeciesId[]).filter((id) => BACK_READ[id].gaze === 'right');
 }
