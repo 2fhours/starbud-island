@@ -247,6 +247,7 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
 }
 
 .btn, .pad, .touch-right button {
+  touch-action: manipulation;
   border: 0;
   border-radius: 999px;
   padding: 12px 16px;
@@ -285,14 +286,14 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
   position: relative;
   z-index: 2;
   background: var(--cream);
-  padding: 10px 16px 18px;
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .sheet-foot .row { flex-wrap: nowrap; align-items: stretch; }
 .sheet-foot .row .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
-.sheet-body { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 16px 12px; }
+.sheet-body { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 16px 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .stage {
   position: relative;
   display: grid;
@@ -966,6 +967,10 @@ a.btn { text-decoration: none; text-align: center; }
   .battle-sheet .move-form { font-size: 11px; padding: 0 4px; }
 }
 
+@media (max-width: 480px) and (min-height: 700px) {
+  .battle-sheet .moves .btn,
+  .battle-sheet .battle-row .btn { min-height: 44px; }
+}
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; }
   .battle-motion, .battle-fx::after, .floater { animation: none !important; }
