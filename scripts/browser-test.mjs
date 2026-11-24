@@ -732,6 +732,14 @@ try {
   await page.waitForFunction(() => window.__xingya.canAct, { timeout: 4000 });
   const afterKey = await page.evaluate(() => window.__xingya.battle.foes[window.__xingya.battle.fIndex].hp);
   if (afterKey >= beforeKey) throw new Error('数字键没有打出伤害');
+  const leftoverFx = await page.evaluate(() => ({
+    fx: [...document.querySelectorAll('.battle-fx')].filter((el) => el.dataset.fx).length,
+    floaters: document.querySelectorAll('.floater').length,
+    strike: document.querySelectorAll('[data-strike]').length,
+  }));
+  if (leftoverFx.fx || leftoverFx.floaters || leftoverFx.strike) {
+    throw new Error(`回合结束后特效还在 ${JSON.stringify(leftoverFx)}`);
+  }
   await page.evaluate(() => {
     const battle = window.__xingya.battle;
     const me = battle.player[battle.pIndex];
