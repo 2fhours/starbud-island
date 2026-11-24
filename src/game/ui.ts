@@ -7,6 +7,7 @@ import { actionOrder, aspectOf, currentObjective, formatPlay, grandmaFollowup, l
 import { SKILL_LIST, basicStrike, getMove, skillForm, skillFormLabel, skillStats } from './skills';
 import type { Input } from './input';
 import { actorFor, actorPortraitHtml, battleFacing, bindStandingPortraits, speciesPortraitHtml, type PortraitFacing } from './portraits';
+import type { ShownVitals } from './fx';
 import type { MoveCat, MoveDef, PlayState, SpeciesId, TypeId } from './types';
 import { CAT_LABEL, LOADOUT_LIMIT, TIER_LABEL, TIER_LEVEL } from './types';
 
@@ -49,7 +50,7 @@ export interface GameHost {
   shakeSuccess: boolean;
   muted: boolean;
   battle: Battle | null;
-  shown: { playerHp: number; foeHp: number; playerMp: number; foeMp: number } | null;
+  shown: ShownVitals | null;
   encounterView: EncounterView | null;
   captureView: CaptureView | null;
   signView: { title: string; text: string } | null;
@@ -85,10 +86,12 @@ function resourceRow(hp: number, hpMax: number, mp: number, mpMax: number): stri
   return `<div class="vitals"><div class="vital"><span class="vital-k">体力</span><div class="hp ${tone}"><span style="width:${hpWidth}%"></span></div><small>${hp}/${hpMax}</small></div><div class="vital"><span class="vital-k">法力</span><div class="mp"><span style="width:${mpWidth}%"></span></div><small>${mp}/${mpMax}</small></div></div>`;
 }
 
-function fighterTags(state: { shield?: number; dotTurns?: number; hotTurns?: number; ailment?: string; ailmentTurns?: number } | undefined): string {
-  if (!state) return '';
+function fighterTags(state: { shield?: number; dotTurns?: number; hotTurns?: number; ailment?: string; ailmentTurns?: number } | undefined, shield?: number): string {
+  if (!state && shield == null) return '';
   const tags: string[] = [];
-  if (state.shield) tags.push(`<span class="status-tag tag-shield">护盾 ${state.shield}</span>`);
+  const shownShield = shield ?? state?.shield ?? 0;
+  if (shownShield) tags.push(`<span class="status-tag tag-shield">护盾 ${shownShield}</span>`);
+  if (!state) return tags.join('');
   if (state.ailment && state.ailment in AILMENT_LABEL) tags.push(`<span class="status-tag tag-${state.ailment}">${AILMENT_LABEL[state.ailment as keyof typeof AILMENT_LABEL]} ${state.ailmentTurns ?? 0}</span>`);
   if (state.dotTurns) tags.push(`<span class="status-tag tag-dot">持续 ${state.dotTurns}</span>`);
   if (state.hotTurns) tags.push(`<span class="status-tag tag-hot">恢复 ${state.hotTurns}</span>`);
@@ -284,7 +287,7 @@ function battleSheet(host: GameHost): string {
   const myMp = host.shown?.playerMp ?? mine.mp;
   const foeSlot = portrait(foe.speciesId, foe.hp <= 0, 'stage', battleFacing('foe'), 'foe');
   const mineSlot = portrait(mine.speciesId, mine.hp <= 0, 'stage', battleFacing('player'), 'player');
-  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${resourceRow(foeHp, maxHp(foe), foeMp, maxMp(foe))}<div class="status-row">${fighterTags(foeState)}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><p class="turn-order">${order}</p><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${resourceRow(myHp, maxHp(mine), myMp, maxMp(mine))}<div class="status-row">${fighterTags(mineState)}</div></div></div>`;
+  const body = `<div class="stage battle-stage" data-type="${esc(stageElement(foeAspect))}"><div class="battle-top"><div><p class="eyebrow">${battle.kind === 'trainer' ? esc(battle.trainerName) : '野生'}</p><h2>${esc(foeSpecies.name)} ${foe.level} 级</h2>${typePill(foeAspect)}${resourceRow(foeHp, maxHp(foe), foeMp, maxMp(foe))}<div class="status-row">${fighterTags(foeState, host.shown ? host.shown.foeShield : undefined)}</div></div></div><div class="battle-field">${mineSlot}${foeSlot}</div></div><div class="log">${esc(host.currentLog || '……')}</div><div class="battle-bottom"><div><p class="turn-order">${order}</p><strong>${esc(mySpecies.name)}</strong> ${mine.level} 级 ${typePill(myAspect)}${resourceRow(myHp, maxHp(mine), myMp, maxMp(mine))}<div class="status-row">${fighterTags(mineState, host.shown ? host.shown.playerShield : undefined)}</div></div></div>`;
   return shell('', body, `<div class="actions">${actions}</div>`, 'battle-sheet');
 }
 

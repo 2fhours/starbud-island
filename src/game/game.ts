@@ -28,7 +28,7 @@ import {
   topUpBalls,
 } from './logic';
 import { basicStrike } from './skills';
-import { blankCueMemory, elementColor, readBattleCue, type BattleCue, type CueMemory } from './fx';
+import { applyShownCue, blankCueMemory, elementColor, readBattleCue, type BattleCue, type CueMemory, type ShownVitals } from './fx';
 import { emptyItems, GATHER_STEPS, ITEM_LABEL, itemFromWild } from './evolution';
 import { clearSave, readSave, writeSave } from './save';
 import {
@@ -100,7 +100,7 @@ export class Game implements GameHost {
   selectedStarter: SpeciesId | null = null;
   nearbyLabel: string | null = null;
   shakeSuccess = false;
-  shown: { playerHp: number; foeHp: number; playerMp: number; foeMp: number } | null = null;
+  shown: ShownVitals | null = null;
   skillQuery = '';
   skillType = 'all';
   skillTier = 'all';
@@ -1430,16 +1430,30 @@ export class Game implements GameHost {
     if (!this.battle) return;
     const mine = this.battle.player[this.battle.pIndex];
     const foe = this.battle.foes[this.battle.fIndex];
-    this.shown = { playerHp: mine.hp, foeHp: foe.hp, playerMp: mine.mp, foeMp: foe.mp };
+    if (!mine || !foe) return;
+    const mineState = this.battle.runtime[mine.uid];
+    const foeState = this.battle.runtime[foe.uid];
+    this.shown = {
+      playerHp: mine.hp,
+      foeHp: foe.hp,
+      playerMp: mine.mp,
+      foeMp: foe.mp,
+      playerShield: mineState?.shield ?? 0,
+      foeShield: foeState?.shield ?? 0,
+    };
   }
 
   private applyCue(cue: BattleCue): void {
-    if (!this.shown) return;
-    const cap = (value: number, max: number) => Math.max(0, Math.min(max, value));
-    if (cue.hpSide === 'player') this.shown.playerHp = cap(this.shown.playerHp + cue.hpDelta, maxHp(this.battle!.player[this.battle!.pIndex]));
-    if (cue.hpSide === 'foe') this.shown.foeHp = cap(this.shown.foeHp + cue.hpDelta, maxHp(this.battle!.foes[this.battle!.fIndex]));
-    if (cue.mpSide === 'player') this.shown.playerMp = cap(this.shown.playerMp + cue.mpDelta, maxMp(this.battle!.player[this.battle!.pIndex]));
-    if (cue.mpSide === 'foe') this.shown.foeMp = cap(this.shown.foeMp + cue.mpDelta, maxMp(this.battle!.foes[this.battle!.fIndex]));
+    if (!this.shown || !this.battle) return;
+    const mine = this.battle.player[this.battle.pIndex];
+    const foe = this.battle.foes[this.battle.fIndex];
+    if (!mine || !foe) return;
+    this.shown = applyShownCue(this.shown, cue, {
+      playerHp: maxHp(mine),
+      foeHp: maxHp(foe),
+      playerMp: maxMp(mine),
+      foeMp: maxMp(foe),
+    });
   }
 
   private paintStrike(cue: BattleCue | null): void {
@@ -1644,12 +1658,24 @@ export class Game implements GameHost {
         const left = document.querySelector('.hud-left')?.getBoundingClientRect();
         const right = document.querySelector('.hud-right')?.getBoundingClientRect();
         const below = Math.max(left?.bottom ?? 0, right?.bottom ?? 0);
-        if (below >= 48) {
-          dock.style.top = `${Math.ceil(below + 10)}px`;
-          dock.style.left = '50%';
+        const dockWidth = Math.max(dock.getBoundingClientRect().width, 120);
+        const gap = (right?.left ?? 0) - (left?.right ?? 0);
+        if (left && right && gap >= dockWidth + 16) {
+          const mid = (left.right + right.left) / 2;
+          dock.style.top = `${Math.ceil(Math.min(left.top, right.top))}px`;
+          dock.style.left = `${Math.round(mid)}px`;
           dock.style.right = 'auto';
           dock.style.bottom = 'auto';
           dock.style.transform = 'translateX(-50%)';
+        } else if (below >= 48 && right) {
+          const rightEdge = Math.min(right.right, window.innerWidth - 8);
+          const leftLimit = Math.max(8, (left?.right ?? 0) + 8);
+          const leftPos = Math.max(leftLimit, rightEdge - dockWidth);
+          dock.style.top = `${Math.ceil(below + 8)}px`;
+          dock.style.left = `${Math.round(leftPos)}px`;
+          dock.style.right = 'auto';
+          dock.style.bottom = 'auto';
+          dock.style.transform = 'none';
         }
       } else {
         dock.style.top = '';

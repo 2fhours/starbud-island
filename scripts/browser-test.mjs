@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 
@@ -23,6 +23,35 @@ preview.stderr.on('data', (chunk) => {
 
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+
+async function assertExploreMusicDock(page, width, height) {
+  const info = await page.evaluate(() => {
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    return { dock: box('#music-dock'), left: box('.hud-left'), right: box('.hud-right') };
+  });
+  if (!info.dock || !info.left || !info.right) {
+    throw new Error(`探索音乐控件或信息卡缺失 ${width}x${height} ${JSON.stringify(info)}`);
+  }
+  const { dock, left, right } = info;
+  const gap = right.left - left.right;
+  const mid = (dock.left + dock.right) / 2;
+  if (width <= 390) {
+    const below = Math.max(left.bottom, right.bottom);
+    if (dock.top + 1 < below) throw new Error(`窄屏音乐控件仍夹在两张信息卡中间 ${width}x${height} ${JSON.stringify(info)}`);
+    if (Math.abs(dock.right - right.right) > 12) throw new Error(`窄屏音乐控件没有靠在右侧信息卡下 ${width}x${height} ${JSON.stringify(info)}`);
+  } else if (gap >= dock.width + 16) {
+    const gapMid = (left.right + right.left) / 2;
+    if (Math.abs(mid - gapMid) > 12 || dock.top + 8 < Math.min(left.top, right.top) - 8) {
+      throw new Error(`宽屏音乐控件没有放进两卡空隙 ${width}x${height} ${JSON.stringify(info)}`);
+    }
+  }
 }
 
 async function assertSeparated(page, selectors, label) {
@@ -219,8 +248,10 @@ async function waitForServer() {
   throw new Error(`预览服务没有起来\n${previewLog}`);
 }
 
+const chromePath = [process.env.CHROME_PATH, '/usr/local/bin/google-chrome', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable'].find((path) => path && existsSync(path));
+if (!chromePath) throw new Error('没有找到 Chrome');
 const browser = await puppeteer.launch({
-  executablePath: '/usr/local/bin/google-chrome',
+  executablePath: chromePath,
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--hide-scrollbars'],
 });
@@ -957,6 +988,7 @@ try {
     await page.setViewport({ width, height });
     await sleep(120);
     await assertSeparated(page, exploreControls, `探索 ${width}x${height}`);
+    await assertExploreMusicDock(page, width, height);
     await page.evaluate(() => {
       const el = document.getElementById('toast');
       el.textContent = '在地图上按住拖动就能走路，松开即停';

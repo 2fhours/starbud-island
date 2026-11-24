@@ -27,6 +27,25 @@ export interface BattleCue {
   hpDelta: number;
   mpSide: CueSide | null;
   mpDelta: number;
+  shieldSide: CueSide | null;
+  shieldDelta: number;
+}
+
+/** 战报尚未走完时，界面按已出现的句子显示的体力和护盾。 */
+export interface ShownVitals {
+  playerHp: number;
+  foeHp: number;
+  playerMp: number;
+  foeMp: number;
+  playerShield: number;
+  foeShield: number;
+}
+
+export interface ShownLimits {
+  playerHp: number;
+  foeHp: number;
+  playerMp: number;
+  foeMp: number;
 }
 
 export function blankCueMemory(): CueMemory {
@@ -60,6 +79,8 @@ function empty(memory: CueMemory): BattleCue {
     hpDelta: 0,
     mpSide: null,
     mpDelta: 0,
+    shieldSide: null,
+    shieldDelta: 0,
   };
 }
 
@@ -95,6 +116,8 @@ export function readBattleCue(line: string, names: CueNames, memory: CueMemory):
         text: crit ? `暴击 ${amount}` : `-${amount}`,
         hpSide: target,
         hpDelta: -loss,
+        shieldSide: absorbed ? target : null,
+        shieldDelta: absorbed ? -Number(absorbed[1]) : 0,
       },
       memory,
     };
@@ -117,7 +140,7 @@ export function readBattleCue(line: string, names: CueNames, memory: CueMemory):
   const shield = line.match(/^(.+)获得 (\d+) 点护盾$/);
   if (shield) {
     const side = who(shield[1], names);
-    return { cue: { ...empty(memory), kind: 'shield', actor: side, target: side, text: `护盾 +${shield[2]}` }, memory };
+    return { cue: { ...empty(memory), kind: 'shield', actor: side, target: side, text: `护盾 +${shield[2]}`, shieldSide: side, shieldDelta: Number(shield[2]) }, memory };
   }
   if (/的(攻击|防御|速度)上升了$/.test(line)) {
     const side = who(line.split('的')[0], names);
@@ -138,4 +161,16 @@ export function readBattleCue(line: string, names: CueNames, memory: CueMemory):
     return { cue: { ...empty(memory), kind: 'miss', target, text: '未命中' }, memory };
   }
   return { cue: empty(memory), memory };
+}
+
+export function applyShownCue(shown: ShownVitals, cue: BattleCue, limits: ShownLimits): ShownVitals {
+  const cap = (value: number, max: number) => Math.max(0, Math.min(max, value));
+  const next = { ...shown };
+  if (cue.hpSide === 'player') next.playerHp = cap(next.playerHp + cue.hpDelta, limits.playerHp);
+  if (cue.hpSide === 'foe') next.foeHp = cap(next.foeHp + cue.hpDelta, limits.foeHp);
+  if (cue.mpSide === 'player') next.playerMp = cap(next.playerMp + cue.mpDelta, limits.playerMp);
+  if (cue.mpSide === 'foe') next.foeMp = cap(next.foeMp + cue.mpDelta, limits.foeMp);
+  if (cue.shieldSide === 'player') next.playerShield = Math.max(0, next.playerShield + cue.shieldDelta);
+  if (cue.shieldSide === 'foe') next.foeShield = Math.max(0, next.foeShield + cue.shieldDelta);
+  return next;
 }

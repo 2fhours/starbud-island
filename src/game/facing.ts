@@ -10,8 +10,9 @@ export interface BackRead {
 
 /**
  * left：头或胸朝画面左侧，我方槽位只做水平翻转，使它朝向右侧敌方。
- * right：背面稿已经朝画面右侧。这一批里没有。
+ * right：背面稿已经朝画面右侧，不翻转。这一批是叶角鹿、翠枝鹿、森冕鹿。
  * rear：正后方，看不出面朝哪边。不翻转。不能当成已经面向敌方。
+ * 正后方 23 张若换成已经朝右的新背面，要把对应 gaze 改成 right，避免和翻转叠在一起。
  */
 export const BACK_READ: Record<SpeciesId, BackRead> = {
   lujiao: { gaze: 'right', why: '原稿头已经偏向画面右侧，尾巴也在右侧。再翻转会改成朝左。' },

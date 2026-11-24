@@ -777,10 +777,13 @@ body:not([data-mode="explore"]) .build-tag {
   }
   body[data-mode="explore"] .music-dock {
     top: calc(156px + env(safe-area-inset-top));
-    left: 50%;
-    right: auto;
+    left: auto;
+    right: calc(8px + env(safe-area-inset-right));
     bottom: auto;
-    transform: translateX(-50%);
+    transform: none;
+  }
+  body[data-mode="explore"] .music-dock input[type='range'] {
+    width: 56px;
   }
   body:not([data-mode="explore"]) .music-dock {
     top: calc(8px + env(safe-area-inset-top));
