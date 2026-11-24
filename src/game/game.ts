@@ -148,6 +148,7 @@ export class Game implements GameHost {
   private inspectTimer = 0;
   private inspectX = 0;
   private inspectY = 0;
+  private holdingKey = '';
   private suppressClick = false;
   private encounterLockUntil = 0;
   private talkLockUntil = 0;
@@ -1741,8 +1742,10 @@ export class Game implements GameHost {
       const move = button.dataset.act === 'battle-basic'
         ? basicStrike(mine.aspect ?? 'yangmu')
         : getMove((mine.moves ?? [])[Number(button.dataset.arg)] ?? '');
+      this.holdingKey = `${button.dataset.act}:${button.dataset.arg ?? ''}`;
       this.currentLog = move.desc;
       this.refresh();
+      this.markHolding();
     }, 450);
   }
 
@@ -1754,9 +1757,18 @@ export class Game implements GameHost {
     this.suppressClick = true;
   }
 
+  private markHolding(): void {
+    if (!this.holdingKey) return;
+    const [act, arg] = this.holdingKey.split(':');
+    const button = [...this.overlay.querySelectorAll<HTMLElement>('[data-act]')].find((el) => el.dataset.act === act && (el.dataset.arg ?? '') === (arg ?? ''));
+    button?.classList.add('is-holding');
+  }
+
   private cancelInspect(cancelled: boolean): void {
     window.clearTimeout(this.inspectTimer);
     this.inspectTimer = 0;
+    this.holdingKey = '';
+    this.overlay.querySelectorAll('.is-holding').forEach((el) => el.classList.remove('is-holding'));
     if (cancelled) this.suppressClick = true;
   }
 

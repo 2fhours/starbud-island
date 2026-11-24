@@ -195,6 +195,12 @@ canvas.portrait-stage { width: min(132px, 100%); height: auto; aspect-ratio: 132
 .tag-dot { background: #f8e0c8; }
 .tag-hot { background: #d7f5e4; }
 .move-state { font-size: 11px; font-weight: 700; }
+.move-btn.form-physical .move-form { background: #f6d3c4; color: #6a341c; }
+.move-btn.form-magic .move-form { background: #d5e8f6; color: #1d4e72; }
+.move-btn.form-support .move-form { background: #e3f3df; color: #245c32; }
+.move-btn.is-holding { outline: 3px solid #2f9a5a; outline-offset: 2px; }
+.move-btn.is-cool { box-shadow: inset 0 0 0 2px #b9a08c; }
+.move-btn.is-broke { box-shadow: inset 0 0 0 2px #ef5d4a; }
 .hp > span { display: block; height: 100%; background: linear-gradient(90deg, #67d36a, #b6e86a); width: 0; transition: width 0.25s ease; }
 .hp.mid > span { background: linear-gradient(90deg, #f0c14a, #ffe08a); }
 .hp.low > span { background: linear-gradient(90deg, #ef5d4a, #ffb199); }
